@@ -1,6 +1,7 @@
 // Server fns backing profile, leaderboard, activity, and pack purchase records.
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { Json } from "@/integrations/supabase/types";
 import { normalizeWallet, walletToProfileId } from "@/lib/profile";
 
 /* -------------------- Profile / username -------------------- */
@@ -93,7 +94,7 @@ export const recordShred = createServerFn({ method: "POST" })
       _wallet: normalizedWallet,
       _username: data.username ?? "",
       _pack_id: data.packId,
-      _items: items,
+      _items: items as Json,
     });
     if (error) {
       console.error("[shred] ✗ Discovery/reward insert failed", {
