@@ -25,7 +25,6 @@ import {
   normalizePrivateKey,
   resolveCeloRpcUrl,
 } from "./reward-distribution";
-import { walletToProfileId } from "./profile";
 
 const Input = z.object({
   wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
@@ -93,40 +92,49 @@ export const distributeReward = createServerFn({ method: "POST" })
       ),
     );
 
-    const profileId = walletToProfileId(data.wallet);
     const normalizedWallet = data.wallet.toLowerCase();
     let rewardAuthId: string | undefined;
-    let supabaseAdmin: ReturnType<typeof import("./supabase-admin.server")["getSupabaseAdmin"]> | undefined;
+    const { getSupabasePublic } = await import("./supabase-public.server");
+    const supabasePublic = getSupabasePublic();
+    const setRewardStatus = async (
+      status: "pending" | "sent" | "confirmed" | "failed" | "skipped",
+      txHash?: string,
+      errorMessage?: string,
+      paidAt?: string,
+    ) => {
+      if (!rewardAuthId) return;
+      const { error } = await supabasePublic.rpc("set_reward_payout_status", {
+        _id: rewardAuthId,
+        _status: status,
+        _tx_hash: txHash,
+        _error_message: errorMessage,
+        _paid_at: paidAt,
+      });
+      if (error) {
+        console.error("[reward] failed to update payout status", {
+          rewardAuthId,
+          status,
+          error: error.message,
+        });
+      }
+    };
 
     try {
-      const { getSupabaseAdmin } = await import("./supabase-admin.server");
-      supabaseAdmin = getSupabaseAdmin();
-      console.info("[reward] ✓ Saving payout record", { claimId, profileId, amount });
-      await supabaseAdmin.from("profiles").upsert({
-        id: profileId,
-        wallet: normalizedWallet,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "id" });
-      const { data: rewardRow, error: rewardInsertError } = await supabaseAdmin
-        .from("reward_auth")
-        .insert({
-          user_id: profileId,
-          wallet: normalizedWallet,
-          pack_id: data.packId,
-          amount_usdm: amount,
-          nonce: data.nonce,
-          claim_id: claimId,
-          payout_status: "pending",
-        })
-        .select("id")
-        .single();
+      console.info("[reward] ✓ Saving payout record", { claimId, wallet: normalizedWallet, amount });
+      const { data: rewardRowId, error: rewardInsertError } = await supabasePublic.rpc("begin_reward_payout", {
+        _wallet: normalizedWallet,
+        _pack_id: data.packId,
+        _amount_usdm: amount,
+        _nonce: data.nonce,
+        _claim_id: claimId,
+      });
 
       if (rewardInsertError) {
         console.error("[reward] ✗ Saving payout record failed", {
           error: rewardInsertError.message,
           details: rewardInsertError,
           claimId,
-          profileId,
+          wallet: normalizedWallet,
         });
         return {
           ok: false,
@@ -135,7 +143,7 @@ export const distributeReward = createServerFn({ method: "POST" })
           claimId,
         };
       }
-      rewardAuthId = rewardRow?.id;
+      rewardAuthId = rewardRowId ?? undefined;
       console.info("[reward] ✓ Payout record saved", { rewardAuthId, claimId });
     } catch (dbError) {
       const msg = (dbError as Error)?.message ?? String(dbError);
@@ -170,10 +178,7 @@ export const distributeReward = createServerFn({ method: "POST" })
         usdmAddress: USDM_ADDRESS,
       });
       if (chainId !== celo.id) {
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "failed",
-          error_message: `Wrong chain id ${chainId}`,
-        }).eq("id", rewardAuthId);
+        await setRewardStatus("failed", undefined, `Wrong chain id ${chainId}`);
         return { ok: false, error: `Wrong chain id ${chainId}; expected Celo mainnet`, step: "chain_check", claimId };
       }
 
@@ -183,10 +188,7 @@ export const distributeReward = createServerFn({ method: "POST" })
         celoWei: signerCelo.toString(),
       });
       if (signerCelo <= 0n) {
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "failed",
-          error_message: "Backend signer has no CELO for gas",
-        }).eq("id", rewardAuthId);
+        await setRewardStatus("failed", undefined, "Backend signer has no CELO for gas");
         return { ok: false, error: "Backend signer has no CELO for gas", step: "signer_gas_check", claimId, signer: account.address };
       }
 
@@ -200,10 +202,7 @@ export const distributeReward = createServerFn({ method: "POST" })
         console.error("[reward] signer not authorised as rewarder", {
           signer: account.address,
         });
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "failed",
-          error_message: "Backend signer is not authorised as rewarder",
-        }).eq("id", rewardAuthId);
+        await setRewardStatus("failed", undefined, "Backend signer is not authorised as rewarder");
         return { ok: false, error: "signer_not_rewarder", signer: account.address };
       }
       console.info("[reward] ✓ Backend signer authorised", { signer: account.address });
@@ -216,10 +215,7 @@ export const distributeReward = createServerFn({ method: "POST" })
       });
       if (alreadyClaimed) {
         console.info("[reward] claim already used", { claimId });
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "skipped",
-          error_message: "Claim already used on-chain",
-        }).eq("id", rewardAuthId);
+        await setRewardStatus("skipped", undefined, "Claim already used on-chain");
         return { ok: true, skipped: true, reason: "already_claimed", amount };
       }
 
@@ -234,10 +230,11 @@ export const distributeReward = createServerFn({ method: "POST" })
           have: treasuryBal.toString(),
           need: amountWei.toString(),
         });
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "failed",
-          error_message: `Reward contract underfunded: have ${treasuryBal.toString()}, need ${amountWei.toString()}`,
-        }).eq("id", rewardAuthId);
+        await setRewardStatus(
+          "failed",
+          undefined,
+          `Reward contract underfunded: have ${treasuryBal.toString()}, need ${amountWei.toString()}`,
+        );
         return { ok: false, error: "treasury_underfunded" };
       }
       console.info("[reward] ✓ Reward contract USDM balance checked", {
@@ -264,10 +261,7 @@ export const distributeReward = createServerFn({ method: "POST" })
 
       const hash = await walletClient.writeContract(request);
       console.info(`[reward] ✓ Transaction hash: ${hash}`, { hash, signer: account.address });
-      await supabaseAdmin?.from("reward_auth").update({
-        payout_status: "sent",
-        tx_hash: hash,
-      }).eq("id", rewardAuthId);
+      await setRewardStatus("sent", hash);
 
       const receipt = await publicClient.waitForTransactionReceipt({
         hash,
@@ -281,34 +275,17 @@ export const distributeReward = createServerFn({ method: "POST" })
       });
       if (!ok) {
         console.error("[reward] ✗ Transaction reverted", { receipt });
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "failed",
-          tx_hash: hash,
-          error_message: "Transaction reverted",
-        }).eq("id", rewardAuthId);
+        await setRewardStatus("failed", hash, "Transaction reverted");
       }
 
       if (ok) {
         console.info("[reward] ✓ Updating reward status", { rewardAuthId, hash });
-        await supabaseAdmin?.from("reward_auth").update({
-          payout_status: "confirmed",
-          tx_hash: hash,
-          paid_at: new Date().toISOString(),
-          error_message: null,
-        }).eq("id", rewardAuthId);
+        await setRewardStatus("confirmed", hash, undefined, new Date().toISOString());
         try {
-          const { data: currentGlobal } = await supabaseAdmin!
-            .from("global_stats")
-            .select("rewards_usdm")
-            .eq("id", 1)
-            .maybeSingle();
-          await supabaseAdmin!
-            .from("global_stats")
-            .update({
-              rewards_usdm: Number(currentGlobal?.rewards_usdm ?? 0) + amount,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", 1);
+          const { error: statsError } = await supabasePublic.rpc("add_confirmed_reward_total", {
+            _amount_usdm: amount,
+          });
+          if (statsError) throw statsError;
         } catch (statsError) {
           console.error("[reward] failed to update paid reward stats", {
             error: (statsError as Error)?.message ?? String(statsError),
@@ -336,10 +313,7 @@ export const distributeReward = createServerFn({ method: "POST" })
         error: msg,
         stack: (e as Error)?.stack,
       });
-      await supabaseAdmin?.from("reward_auth").update({
-        payout_status: "failed",
-        error_message: msg.slice(0, 500),
-      }).eq("id", rewardAuthId);
+      await setRewardStatus("failed", undefined, msg.slice(0, 500));
       return { ok: false, error: msg.slice(0, 300) || "send_failed" };
     }
   });
