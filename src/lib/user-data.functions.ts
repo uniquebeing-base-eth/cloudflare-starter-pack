@@ -24,10 +24,10 @@ export const upsertProfile = createServerFn({ method: "POST" })
     const supabasePublic = getSupabasePublic();
     const { error } = await supabasePublic.rpc("upsert_wallet_profile", {
       _wallet: normalizedWallet,
-      _username: data.username ?? null,
-      _xp: data.xp ?? null,
-      _packs_shredded: data.packs_shredded ?? null,
-      _level: data.level ?? null,
+      _username: data.username,
+      _xp: data.xp,
+      _packs_shredded: data.packs_shredded,
+      _level: data.level,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -39,7 +39,6 @@ export const getMyProfile = createServerFn({ method: "GET" })
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
     const profileId = walletToProfileId(data.wallet);
-    const { data: row, error } = await supabaseAdmin
     const { data: row, error } = await supabasePublic
       .from("profiles").select("*").eq("id", profileId).maybeSingle();
     if (error) throw new Error(error.message);
@@ -92,7 +91,7 @@ export const recordShred = createServerFn({ method: "POST" })
     }));
     const { data: result, error } = await supabasePublic.rpc("record_wallet_shred", {
       _wallet: normalizedWallet,
-      _username: data.username ?? null,
+      _username: data.username ?? "",
       _pack_id: data.packId,
       _items: items,
     });
@@ -214,7 +213,7 @@ export const recordPackPurchase = createServerFn({ method: "POST" })
       _wallet: data.wallet.toLowerCase(),
       _pack_id: data.packId,
       _order_id: data.orderId,
-      _tx_hash: data.txHash ?? null,
+      _tx_hash: data.txHash,
       _price_usdm: data.priceUsdm,
     });
     if (error && !/duplicate key/i.test(error.message)) throw new Error(error.message);
