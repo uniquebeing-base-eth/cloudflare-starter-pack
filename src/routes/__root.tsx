@@ -11,6 +11,8 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { initializeFarcasterMiniApp } from "../lib/farcaster";
+
 
 function NotFoundComponent() {
   return (
@@ -77,21 +79,65 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Shreds — Discover. Collect. Earn." },
+      { name: "description", content: "Slash open digital packs. Discover stablecoins, collectible cards and knowledge on Celo & MiniPay." },
+      { property: "og:title", content: "Shreds — Discover. Collect. Earn." },
+      { property: "og:description", content: "Slash open digital packs. Discover stablecoins, collectibles and rare knowledge." },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "https://shred.signalify.xyz/image.png" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:image", content: "https://shred.signalify.xyz/image.png" },
+      // Farcaster Mini App embed — makes casts of this URL render as a launch card.
+      {
+        name: "fc:miniapp",
+        content: JSON.stringify({
+          version: "1",
+          imageUrl: "https://shred.signalify.xyz/image.png",
+          button: {
+            title: "Launch Shreds",
+            action: {
+              type: "launch_miniapp",
+              name: "Shreds",
+              url: "https://shred.signalify.xyz",
+              splashImageUrl: "https://shred.signalify.xyz/splash.png",
+              splashBackgroundColor: "#0a0f0a",
+            },
+          },
+        }),
+      },
+      // Backwards-compat for older Farcaster clients.
+      {
+        name: "fc:frame",
+        content: JSON.stringify({
+          version: "1",
+          imageUrl: "https://shred.signalify.xyz/image.png",
+          button: {
+            title: "Launch Shreds",
+            action: {
+              type: "launch_frame",
+              name: "Shreds",
+              url: "https://shred.signalify.xyz",
+              splashImageUrl: "https://shred.signalify.xyz/splash.png",
+              splashBackgroundColor: "#0a0f0a",
+            },
+          },
+        }),
+      },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/icon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/icon.png" },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" },
+      // Preload pack + wordmark so home screen paints without pop-in.
+      { rel: "preload", as: "image", href: "/shreds-wordmark.png" },
+      { rel: "preload", as: "image", href: "/packs/starter.png" },
+      { rel: "preload", as: "image", href: "/packs/mystery.png" },
+      { rel: "preload", as: "image", href: "/packs/alpha.png" },
+      { rel: "preload", as: "image", href: "/packs/legendary.png" },
+      { rel: "preload", as: "image", href: "/packs/explorer.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -116,6 +162,35 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    const initialize = () => {
+      const run = () => {
+        void initializeFarcasterMiniApp();
+      };
+
+      if (document.readyState === "complete") {
+        window.requestAnimationFrame(run);
+        window.setTimeout(run, 250);
+        return;
+      }
+
+      const onLoad = () => {
+        window.requestAnimationFrame(run);
+        window.setTimeout(run, 250);
+        window.removeEventListener("load", onLoad);
+      };
+
+      window.addEventListener("load", onLoad);
+    };
+
+    if (typeof window === "undefined") return undefined;
+
+    initialize();
+    return () => {
+      window.removeEventListener("load", () => undefined);
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

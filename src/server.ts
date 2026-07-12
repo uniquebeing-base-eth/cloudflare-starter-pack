@@ -7,6 +7,12 @@ type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
 
+type RuntimeEnv = Record<string, string | undefined>;
+
+declare global {
+  var __env: RuntimeEnv | undefined;
+}
+
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
@@ -44,9 +50,30 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+function primeRuntimeEnv(env: unknown) {
+  if (!env || typeof env !== "object") return;
+
+  const bindings = Object.entries(env as Record<string, unknown>).reduce<RuntimeEnv>((acc, [key, value]) => {
+    if (typeof value === "string") acc[key] = value;
+    return acc;
+  }, {});
+
+  globalThis.__env = { ...(globalThis.__env ?? {}), ...bindings };
+
+  if (typeof process !== "undefined") {
+    const processEnv = process.env as RuntimeEnv;
+    for (const [key, value] of Object.entries(bindings)) {
+      if (value !== undefined && processEnv[key] === undefined) {
+        processEnv[key] = value;
+      }
+    }
+  }
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      primeRuntimeEnv(env);
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
