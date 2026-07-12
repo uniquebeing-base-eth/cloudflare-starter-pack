@@ -1,0 +1,37 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjg0OTExNiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweGQzRDViRmMyOGJjMjA5OTg4NGEzNmVkNDE2NTY4NzRCQ2RENDYzMTUifQ",
+    "payload": "eyJkb21haW4iOiJzaHJlZC5zaWduYWxpZnkueHl6In0",
+    "signature": "QZ7a88R8YGnoV2FE0vaTjyv37migfGunqAG8PjwXVJMBidUk0qEIA2GohZhfYsAeFYL2rrMmkzzd8RVKeMUN2hw="
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Shreds",
+    "iconUrl": "https://shred.signalify.xyz/icon.png",
+    "homeUrl": "https://shred.signalify.xyz",
+    "castShareUrl": "https://shred.signalify.xyz",
+    "imageUrl": "https://shred.signalify.xyz/image.png",
+    "buttonTitle": "Launch Shreds",
+    "splashImageUrl": "https://shred.signalify.xyz/splash.png",
+    "splashBackgroundColor": "#0a0f0a",
+    "webhookUrl": "https://shred.signalify.xyz/api/webhook",
+    "subtitle": "Shred Earn and Collect",
+    "description": "Shred packs earn rewards and collect on Celo",
+    "primaryCategory": "games",
+    "tags": [
+      "shreds",
+      "celo",
+      "minipay",
+      "rewards",
+      "collectibles"
+    ],
+    "heroImageUrl": "https://shred.signalify.xyz/image.png",
+    "tagline": "Shred Earn and Collect",
+    "ogTitle": "Shreds",
+    "ogDescription": "Collect packs and earn rewards",
+    "ogImageUrl": "https://shred.signalify.xyz/image.png"
+  },
+  "baseBuilder": {
+    "ownerAddress": "0x170c5a413136F094421fad8Dd20285b5e05Fff5e"
+  }
+}
