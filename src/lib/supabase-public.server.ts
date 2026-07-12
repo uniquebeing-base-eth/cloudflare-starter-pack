@@ -25,26 +25,26 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-let cachedAdmin: ReturnType<typeof createClient<Database>> | undefined;
+let cachedClient: ReturnType<typeof createClient<Database>> | undefined;
 
-export function getSupabaseAdmin() {
-  if (cachedAdmin) return cachedAdmin;
+export function getSupabasePublic() {
+  if (cachedClient) return cachedClient;
 
   const env = getRuntimeEnv();
   const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-  const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY;
+  const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !publishableKey) {
     const missing = [
       ...(!supabaseUrl ? ["SUPABASE_URL"] : []),
-      ...(!serviceRoleKey ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
+      ...(!publishableKey ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
     ];
     throw new Error(`Database backend is not configured: missing ${missing.join(", ")}.`);
   }
 
-  cachedAdmin = createClient<Database>(supabaseUrl, serviceRoleKey, {
+  cachedClient = createClient<Database>(supabaseUrl, publishableKey, {
     global: {
-      fetch: createSupabaseFetch(serviceRoleKey),
+      fetch: createSupabaseFetch(publishableKey),
     },
     auth: {
       storage: undefined,
@@ -53,5 +53,5 @@ export function getSupabaseAdmin() {
     },
   });
 
-  return cachedAdmin;
+  return cachedClient;
 }

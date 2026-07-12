@@ -259,6 +259,10 @@ export type Database = {
       }
     }
     Functions: {
+      add_confirmed_reward_total: {
+        Args: { _amount_usdm: number }
+        Returns: undefined
+      }
       apply_shred: {
         Args: {
           _drops: number
@@ -269,10 +273,75 @@ export type Database = {
         }
         Returns: undefined
       }
+      begin_reward_payout: {
+        Args: {
+          _amount_usdm: number
+          _claim_id: string
+          _nonce: string
+          _pack_id: string
+          _wallet: string
+        }
+        Returns: string
+      }
       increment_shred_stats: {
         Args: { _pack: string; _user: string; _xp: number }
         Returns: undefined
       }
+      record_wallet_pack_purchase: {
+        Args: {
+          _order_id: string
+          _pack_id: string
+          _price_usdm?: number
+          _tx_hash?: string
+          _wallet: string
+        }
+        Returns: undefined
+      }
+      record_wallet_shred: {
+        Args: {
+          _items: Json
+          _pack_id: string
+          _username: string
+          _wallet: string
+        }
+        Returns: Json
+      }
+      set_reward_payout_status: {
+        Args: {
+          _error_message?: string
+          _id: string
+          _paid_at?: string
+          _status: string
+          _tx_hash?: string
+        }
+        Returns: undefined
+      }
+      upsert_wallet_profile: {
+        Args: {
+          _level?: number
+          _packs_shredded?: number
+          _username?: string
+          _wallet: string
+          _xp?: number
+        }
+        Returns: {
+          created_at: string
+          id: string
+          level: number
+          packs_shredded: number
+          updated_at: string
+          username: string | null
+          wallet: string | null
+          xp: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      wallet_profile_id: { Args: { _wallet: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
