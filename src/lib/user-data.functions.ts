@@ -161,10 +161,11 @@ export const getStatsAndFeed = createServerFn({ method: "GET" })
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
 
-    const [{ data: packRows, error: packError }, { data: globalRow, error: globalError }, { data: feedRows, error: feedError }] = await Promise.all([
+    const [{ data: packRows, error: packError }, { data: globalRow, error: globalError }, { data: feedRows, error: feedError }, { data: avatarRows }] = await Promise.all([
       supabasePublic.from("pack_stats").select("pack_id,owners,shreds,drops").order("pack_id"),
       supabasePublic.from("global_stats").select("shredders,packs_shredded,discoveries,rewards_usdm").eq("id", 1).maybeSingle(),
       supabasePublic.from("live_feed").select("username,wallet,pack_id,kind,text,amount").order("created_at", { ascending: false }).limit(30),
+      supabasePublic.from("profiles").select("wallet, username, avatar_url").not("avatar_url", "is", null).limit(500),
     ]);
 
     if (packError) throw new Error(packError.message);
@@ -187,9 +188,15 @@ export const getStatsAndFeed = createServerFn({ method: "GET" })
       rewards_usdm: Number(globalRow?.rewards_usdm ?? 0),
     };
 
+    const avatarByWallet: Record<string, string> = {};
+    (avatarRows ?? []).forEach((row) => {
+      if (row.wallet && row.avatar_url) avatarByWallet[row.wallet.toLowerCase()] = row.avatar_url;
+    });
+
     return {
       packStats,
       globalStats,
+      avatarByWallet,
       liveFeed: (feedRows ?? []).map((row) => ({
         username: row.username,
         wallet: row.wallet,
