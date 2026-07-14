@@ -24,6 +24,7 @@ export type Database = {
           rarity: string
           sub: string
           title: string
+          tx_hash: string | null
           user_id: string
         }
         Insert: {
@@ -35,6 +36,7 @@ export type Database = {
           rarity?: string
           sub: string
           title: string
+          tx_hash?: string | null
           user_id: string
         }
         Update: {
@@ -46,6 +48,7 @@ export type Database = {
           rarity?: string
           sub?: string
           title?: string
+          tx_hash?: string | null
           user_id?: string
         }
         Relationships: []
@@ -166,6 +169,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
           id: string
           level: number
@@ -176,6 +180,7 @@ export type Database = {
           xp: number
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           id: string
           level?: number
@@ -186,6 +191,7 @@ export type Database = {
           xp?: number
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           id?: string
           level?: number
@@ -316,31 +322,64 @@ export type Database = {
         }
         Returns: undefined
       }
-      upsert_wallet_profile: {
-        Args: {
-          _level?: number
-          _packs_shredded?: number
-          _username?: string
-          _wallet: string
-          _xp?: number
-        }
-        Returns: {
-          created_at: string
-          id: string
-          level: number
-          packs_shredded: number
-          updated_at: string
-          username: string | null
-          wallet: string | null
-          xp: number
-        }
-        SetofOptions: {
-          from: "*"
-          to: "profiles"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+      set_reward_tx_hash: {
+        Args: { _amount: number; _tx_hash: string; _wallet: string }
+        Returns: undefined
       }
+      upsert_wallet_profile:
+        | {
+            Args: {
+              _level?: number
+              _packs_shredded?: number
+              _username?: string
+              _wallet: string
+              _xp?: number
+            }
+            Returns: {
+              avatar_url: string | null
+              created_at: string
+              id: string
+              level: number
+              packs_shredded: number
+              updated_at: string
+              username: string | null
+              wallet: string | null
+              xp: number
+            }
+            SetofOptions: {
+              from: "*"
+              to: "profiles"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              _avatar_url?: string
+              _level?: number
+              _packs_shredded?: number
+              _username?: string
+              _wallet: string
+              _xp?: number
+            }
+            Returns: {
+              avatar_url: string | null
+              created_at: string
+              id: string
+              level: number
+              packs_shredded: number
+              updated_at: string
+              username: string | null
+              wallet: string | null
+              xp: number
+            }
+            SetofOptions: {
+              from: "*"
+              to: "profiles"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       wallet_profile_id: { Args: { _wallet: string }; Returns: string }
     }
     Enums: {

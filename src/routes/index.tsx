@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ChangeEvent } from "react";
 import {
   Trophy, User, Users, Package, Gem, Wallet, Flame, Gift, Star,
   Lightbulb, X, ChevronLeft, ChevronRight, Award, Zap,
-  ArrowRight, AlertTriangle, Check, Loader2, HelpCircle, ExternalLink,
+  ArrowRight, AlertTriangle, Check, Loader2, HelpCircle, ExternalLink, Camera,
 } from "lucide-react";
 import { BackgroundMusic } from "@/components/BackgroundMusic";
 import { useServerFn } from "@tanstack/react-start";
@@ -197,13 +197,16 @@ type Discovery = {
   rarity?: "Common" | "Rare" | "Epic" | "Legendary";
   image?: string;
   amountRaw?: number;
+  txHash?: string | null;
+  createdAt?: string | null;
 };
 
-type LeaderboardRow = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; range: string };
-type ProfileSummary = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; level: number };
+type LeaderboardRow = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; avatar_url?: string | null; range: string };
+type ProfileSummary = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; level: number; avatar_url?: string | null };
 
-function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null }): Discovery {
+function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null; tx_hash?: string | null; created_at?: string | null }): Discovery {
   const amount = typeof item.amount === "number" ? item.amount : undefined;
+  const base = { txHash: item.tx_hash ?? null, createdAt: item.created_at ?? null };
   switch (item.kind) {
     case "USDM":
       return {
@@ -215,6 +218,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: (item.rarity as Discovery["rarity"]) ?? "Common",
         image: DISCOVERY_IMG.usdm,
         amountRaw: amount,
+        ...base,
       };
     case "XP":
       return {
@@ -226,6 +230,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: (item.rarity as Discovery["rarity"]) ?? "Common",
         image: DISCOVERY_IMG.xp,
         amountRaw: amount,
+        ...base,
       };
     case "CARD":
       return {
@@ -237,6 +242,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: (item.rarity as Discovery["rarity"]) ?? "Rare",
         image: CARD_LIBRARY["neon-cube"],
         amountRaw: amount,
+        ...base,
       };
     default:
       return {
@@ -248,6 +254,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: "Common",
         image: DISCOVERY_IMG.fact,
         amountRaw: amount,
+        ...base,
       };
   }
 }
@@ -321,30 +328,30 @@ function buildDiscoveries(packId: string): Discovery[] {
 
 // Live event feed — populated from real activity (Supabase realtime).
 // Starts empty; entries are prepended as they arrive.
-type LiveEvent = { user: string; text: string; accent: string; from: string };
+type LiveEvent = { user: string; text: string; accent: string; from: string; wallet: string | null; avatar_url?: string | null };
 const LIVE_EVENTS_SEED: LiveEvent[] = [];
 
 type FeedRow = { username: string; wallet: string | null; pack_id: string | null; kind: string; text: string; amount: number | string | null };
-function feedRowToEvent(r: FeedRow): LiveEvent {
+function feedRowToEvent(r: FeedRow, avatarByWallet: Record<string, string>): LiveEvent {
   const username = r.username ? (r.username.startsWith("@") ? r.username : `@${r.username}`) : "@Shredder";
-  // Normalize kind/amount/title into a friendly ticker message
+  const wallet = r.wallet ? r.wallet.toLowerCase() : null;
+  const avatar_url = wallet ? avatarByWallet[wallet] : null;
+  const base = { user: username, wallet, avatar_url } as const;
   if (r.kind === "USDM" || r.kind === "USDT") {
     const amt = typeof r.amount === "number" ? Number(r.amount) : r.amount ?? "";
-    return { user: username, text: "just got", accent: `${amt} ${r.kind.toLowerCase()}`, from: r.pack_id ?? "Shreds" };
+    return { ...base, text: "just got", accent: `${amt} ${r.kind.toLowerCase()}`, from: r.pack_id ?? "Shreds" };
   }
   if (r.kind === "CARD") {
-    // text was set to something like 'collected <title>' in the inserter
     const title = r.text?.replace(/^collected\s+/i, '') || r.kind;
-    return { user: username, text: "collected", accent: title, from: r.pack_id ?? "Shreds" };
+    return { ...base, text: "collected", accent: title, from: r.pack_id ?? "Shreds" };
   }
   if (r.kind === "FACT") {
     const fact = r.text || "a fact";
-    return { user: username, text: "discovered", accent: fact, from: r.pack_id ?? "Shreds" };
+    return { ...base, text: "discovered", accent: fact, from: r.pack_id ?? "Shreds" };
   }
-  // Fallback: use raw text split into verb + rest
   const [verb, ...rest] = (r.text || "").split(" ");
   return {
-    user: username,
+    ...base,
     text: verb || "shredded",
     accent: rest.join(" ") || r.kind,
     from: r.pack_id ?? "Shreds",
@@ -436,6 +443,7 @@ function HomeScreen() {
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>(LIVE_EVENTS_SEED);
   const [packStats, setPackStats] = useState<Record<string, { owners: number; shreds: number; drops: number }>>({});
   const [globalStats, setGlobalStats] = useState<{ shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number }>({ shredders: 0, packs_shredded: 0, discoveries: 0, rewards_usdm: 0 });
+  const [avatarByWallet, setAvatarByWallet] = useState<Record<string, string>>({});
   const wallet = useWallet();
   const callDistribute = useServerFn(distributeReward);
   
@@ -456,7 +464,7 @@ function HomeScreen() {
           callListMyDiscoveries({ data: { wallet: wallet.address } }),
           callGetStarterCooldown({ data: { wallet: wallet.address } }),
         ]);
-        const nextProfile = profile as { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null } | null;
+        const nextProfile = profile as { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null; level?: number | null; avatar_url?: string | null } | null;
         if (nextProfile?.username) {
           setUsername(nextProfile.username);
         } else {
@@ -468,7 +476,7 @@ function HomeScreen() {
         } else {
           setProfileSummary(null);
         }
-        setCollection(((discoveryRows as Array<{ kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null }> | undefined) ?? []).map(toUiDiscovery));
+        setCollection(((discoveryRows as Array<{ kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null; tx_hash?: string | null; created_at?: string | null }> | undefined) ?? []).map(toUiDiscovery));
         const nextCooldown = cooldown as { active?: boolean; until?: string | null } | undefined;
         const untilMs = nextCooldown?.until ? new Date(nextCooldown.until).getTime() : 0;
         setStarterCooldown(!!nextCooldown?.active && untilMs > Date.now());
@@ -488,6 +496,7 @@ function HomeScreen() {
       const nextSnapshot = snapshot as {
         packStats?: Record<string, { owners: number; shreds: number; drops: number }>;
         globalStats?: { shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number };
+        avatarByWallet?: Record<string, string>;
         liveFeed?: Array<{ username: string; wallet: string | null; pack_id: string | null; kind: string; text: string; amount: number | string | null }>;
       };
 
@@ -499,8 +508,11 @@ function HomeScreen() {
         setGlobalStats(nextSnapshot.globalStats);
       }
 
+      const nextAvatarMap = nextSnapshot.avatarByWallet ?? {};
+      setAvatarByWallet(nextAvatarMap);
+
       if (nextSnapshot.liveFeed) {
-        const events = nextSnapshot.liveFeed.map((r) => feedRowToEvent(r)).reverse().reverse();
+        const events = nextSnapshot.liveFeed.map((r) => feedRowToEvent(r, nextAvatarMap));
         setLiveEvents(events);
       }
     } catch (error) {
@@ -642,7 +654,7 @@ function HomeScreen() {
         rarity: i.rarity,
         amount: i.amountRaw,
       }));
-      const label = username ?? (wallet.address ? shortAddr(wallet.address) : "Shredder");
+      const label = username && username.length > 0 ? username : undefined;
       void (async () => {
         try {
           if (!wallet.address) throw new Error("Connect your wallet before shredding.");
@@ -813,9 +825,13 @@ function HomeScreen() {
               aria-label="Profile"
             >
               <div className="icon-tile w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden group-active:scale-95 transition">
-                <div className="w-full h-full flex items-center justify-center" style={{ background: AVATAR_GRADIENTS[0] }}>
-                  <User className="w-4 h-4 text-white" />
-                </div>
+                {profileSummary?.avatar_url ? (
+                  <img src={profileSummary.avatar_url} alt="You" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center" style={{ background: AVATAR_GRADIENTS[0] }}>
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                )}
               </div>
               <span className="text-[7px] font-semibold tracking-[0.16em] text-muted-foreground">PROFILE</span>
             </button>
@@ -912,6 +928,17 @@ function HomeScreen() {
           username={username}
           summary={profileSummary}
           onRegister={() => { setShowProfile(false); setShowUsernameModal(true); }}
+          onAvatarChange={async (dataUrl) => {
+            if (!wallet.address) return;
+            setProfileSummary((prev) => prev ? { ...prev, avatar_url: dataUrl } : prev);
+            try {
+              await callUpsertProfile({ data: { wallet: wallet.address, avatar_url: dataUrl } });
+              void refreshProfileAndLeaderboard();
+              void refreshStatsAndFeed();
+            } catch (e) {
+              console.error("[profile] avatar upload failed", e);
+            }
+          }}
         />
       )}
       {showOnboarding && <OnboardingOverlay onDone={finishOnboarding} />}
@@ -1174,9 +1201,11 @@ function LiveTicker({ event, idx }: { event: LiveEvent; idx: number }) {
           <span className="w-1 h-1 rounded-full bg-shred animate-pulse" /> LIVE
         </div>
         <div
-          className="w-4 h-4 rounded-full shrink-0"
+          className="w-5 h-5 rounded-full shrink-0 overflow-hidden"
           style={{ background: AVATAR_GRADIENTS[idx % AVATAR_GRADIENTS.length] }}
-        />
+        >
+          {event.avatar_url && <img src={event.avatar_url} alt="" className="w-full h-full object-cover" />}
+        </div>
         <div className="text-[10px] flex-1 truncate min-w-0">
           <span className="font-bold">{event.user}</span>{" "}
           <span className="text-muted-foreground">{event.text}</span>{" "}
@@ -1215,10 +1244,19 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
       ) : (
         <div className="space-y-2">
           {leaderboard.map((row, index) => (
-            <div key={`${row.wallet ?? row.username ?? index}`} className="stat-card rounded-xl px-3 py-2 flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred">#{index + 1}</div>
+            <div key={`${row.wallet ?? row.username ?? index}`} className="stat-card rounded-xl px-2.5 py-2 flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{index + 1}</div>
+              <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }}>
+                {row.avatar_url ? (
+                  <img src={row.avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate">{row.username ?? shortAddr(row.wallet)}</div>
+                <div className="font-bold text-sm truncate">{row.username ? `@${row.username}` : shortAddr(row.wallet)}</div>
                 <div className="text-[10px] text-muted-foreground">{row.packs_shredded} packs · {row.xp} XP</div>
               </div>
             </div>
@@ -1231,22 +1269,100 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
 
 /* -------------------- Profile -------------------- */
 
-function ProfileSheet({ onClose, wallet, collection, username, summary, onRegister }: {
+function ProfileSheet({ onClose, wallet, collection, username, summary, onRegister, onAvatarChange }: {
   onClose: () => void; wallet: string | null; collection: Discovery[];
   username: string | null; summary: ProfileSummary | null; onRegister: () => void;
+  onAvatarChange: (dataUrl: string) => void | Promise<void>;
 }) {
   const cards = collection.filter(c => c.kind === "CARD");
   const facts = collection.filter(c => c.kind === "FACT");
   const stables = collection.filter(c => c.kind === "USDM");
   const [tab, setTab] = useState<"CARDS" | "FACTS" | "REWARDS">("CARDS");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarUrl = summary?.avatar_url ?? null;
+
+  const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { setAvatarError("Please choose an image file."); return; }
+    if (file.size > 8 * 1024 * 1024) { setAvatarError("Image too large (max 8MB)."); return; }
+    setAvatarError(null);
+    setUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = dataUrl;
+      });
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext("2d")!;
+      // cover-fit crop
+      const scale = Math.max(size / img.width, size / img.height);
+      const dw = img.width * scale, dh = img.height * scale;
+      ctx.drawImage(img, (size - dw) / 2, (size - dh) / 2, dw, dh);
+      const jpg = canvas.toDataURL("image/jpeg", 0.82);
+      await onAvatarChange(jpg);
+    } catch (err) {
+      setAvatarError((err as Error)?.message?.slice(0, 100) || "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <Sheet title="Profile" onClose={onClose} Icon={User}>
       <div className="stat-card rounded-2xl p-4 flex items-center gap-3">
-        <div className="w-14 h-14 rounded-2xl shrink-0" style={{ background: AVATAR_GRADIENTS[0] }} />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="relative w-16 h-16 rounded-2xl shrink-0 overflow-hidden active:scale-95 transition"
+          style={!avatarUrl ? { background: AVATAR_GRADIENTS[0] } : undefined}
+          aria-label="Change avatar"
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Your avatar" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <User className="w-8 h-8 text-white" />
+            </div>
+          )}
+          <div className="absolute bottom-0 inset-x-0 bg-black/55 flex items-center justify-center py-0.5">
+            {uploading ? (
+              <Loader2 className="w-3 h-3 text-white animate-spin" />
+            ) : (
+              <Camera className="w-3 h-3 text-white" />
+            )}
+          </div>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarFile}
+        />
         <div className="flex-1 min-w-0">
-          <div className="font-display text-xl truncate">{username ? username.toUpperCase() : "UNCLAIMED"}</div>
-          <div className="text-[11px] text-muted-foreground truncate">{wallet ? shortAddr(wallet) : "Wallet not connected"}</div>
+          <div className="font-display text-xl truncate">{username ? `@${username}` : "UNCLAIMED"}</div>
+          {!username && wallet && (
+            <div className="text-[11px] text-muted-foreground truncate">{shortAddr(wallet)}</div>
+          )}
+          {!wallet && (
+            <div className="text-[11px] text-muted-foreground truncate">Wallet not connected</div>
+          )}
+          {avatarError && <div className="text-[10px] text-destructive mt-1">{avatarError}</div>}
           {(() => {
             const xp = summary?.xp ?? collection.filter(c => c.kind === "XP").reduce((s, c) => s + (c.amountRaw ?? 0), 0);
             const level = summary?.level ?? Math.max(1, Math.floor(xp / 500) + 1);
@@ -1345,8 +1461,23 @@ function ProfileSheet({ onClose, wallet, collection, username, summary, onRegist
             {stables.map((s, i) => (
               <div key={i} className="stat-card rounded-xl p-3 flex items-center gap-3">
                 <img src={DISCOVERY_IMG.usdm} alt="" className="w-10 h-10 object-contain shrink-0" />
-                <div className="flex-1 font-bold">{s.title}</div>
-                <div className="text-[10px] text-muted-foreground tracking-widest">{s.sub}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{s.title}</div>
+                  {s.txHash ? (
+                    <a
+                      href={`https://celoscan.io/tx/${s.txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-shred flex items-center gap-1 mt-0.5 truncate"
+                    >
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{s.txHash.slice(0, 10)}…{s.txHash.slice(-6)}</span>
+                    </a>
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Payout pending…</div>
+                  )}
+                </div>
+                <div className="text-[10px] text-muted-foreground tracking-widest shrink-0">{s.sub}</div>
               </div>
             ))}
           </div>

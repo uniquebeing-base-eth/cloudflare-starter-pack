@@ -12,6 +12,7 @@ const ProfileUpsertInput = z.object({
   xp: z.number().int().nonnegative().optional(),
   packs_shredded: z.number().int().nonnegative().optional(),
   level: z.number().int().positive().optional(),
+  avatar_url: z.string().max(60000).optional(),
 });
 
 const SHRED_PACKS = ["starter", "mystery", "alpha", "legendary", "explorer"] as const;
@@ -29,6 +30,7 @@ export const upsertProfile = createServerFn({ method: "POST" })
       _xp: data.xp,
       _packs_shredded: data.packs_shredded,
       _level: data.level,
+      _avatar_url: data.avatar_url,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
@@ -159,10 +161,11 @@ export const getStatsAndFeed = createServerFn({ method: "GET" })
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
 
-    const [{ data: packRows, error: packError }, { data: globalRow, error: globalError }, { data: feedRows, error: feedError }] = await Promise.all([
+    const [{ data: packRows, error: packError }, { data: globalRow, error: globalError }, { data: feedRows, error: feedError }, { data: avatarRows }] = await Promise.all([
       supabasePublic.from("pack_stats").select("pack_id,owners,shreds,drops").order("pack_id"),
       supabasePublic.from("global_stats").select("shredders,packs_shredded,discoveries,rewards_usdm").eq("id", 1).maybeSingle(),
       supabasePublic.from("live_feed").select("username,wallet,pack_id,kind,text,amount").order("created_at", { ascending: false }).limit(30),
+      supabasePublic.from("profiles").select("wallet, username, avatar_url").not("avatar_url", "is", null).limit(500),
     ]);
 
     if (packError) throw new Error(packError.message);
@@ -185,9 +188,15 @@ export const getStatsAndFeed = createServerFn({ method: "GET" })
       rewards_usdm: Number(globalRow?.rewards_usdm ?? 0),
     };
 
+    const avatarByWallet: Record<string, string> = {};
+    (avatarRows ?? []).forEach((row) => {
+      if (row.wallet && row.avatar_url) avatarByWallet[row.wallet.toLowerCase()] = row.avatar_url;
+    });
+
     return {
       packStats,
       globalStats,
+      avatarByWallet,
       liveFeed: (feedRows ?? []).map((row) => ({
         username: row.username,
         wallet: row.wallet,
@@ -232,8 +241,9 @@ export const getLeaderboard = createServerFn({ method: "GET" })
     const supabasePublic = getSupabasePublic();
     const { data: rows, error } = await supabasePublic
       .from("profiles")
-      .select("username, wallet, xp, packs_shredded")
+      .select("username, wallet, xp, packs_shredded, avatar_url")
       .order("xp", { ascending: false })
+      .order("packs_shredded", { ascending: false })
       .limit(50);
     if (error) return [];
     return (rows ?? []).map((row) => ({ ...row, range: data.range })) as Array<{
@@ -241,6 +251,7 @@ export const getLeaderboard = createServerFn({ method: "GET" })
       wallet: string | null;
       xp: number;
       packs_shredded: number;
+      avatar_url: string | null;
       range: string;
     }>;
   });
