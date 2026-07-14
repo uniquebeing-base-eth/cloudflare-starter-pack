@@ -25,7 +25,7 @@ export function walletToProfileId(wallet: string): string {
   return `${tail.slice(0, 8)}-${tail.slice(8, 12)}-4${tail.slice(13, 16)}-8${tail.slice(17, 20)}-${tail.slice(20, 32)}`;
 }
 
-export function toStoredProfile(wallet: string | null | undefined, profile: { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null; level?: number | null } | null | undefined): StoredProfile {
+export function toStoredProfile(wallet: string | null | undefined, profile: { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null; level?: number | null; avatar_url?: string | null } | null | undefined): StoredProfile {
   const normalizedWallet = normalizeWallet(wallet ?? profile?.wallet);
   const xp = Number(profile?.xp ?? 0);
   const packsShredded = Number(profile?.packs_shredded ?? 0);
@@ -37,6 +37,7 @@ export function toStoredProfile(wallet: string | null | undefined, profile: { us
     xp,
     packs_shredded: packsShredded,
     level,
+    avatar_url: profile?.avatar_url ?? null,
   };
 }
 
