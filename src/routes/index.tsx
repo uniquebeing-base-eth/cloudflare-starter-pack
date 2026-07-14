@@ -1269,22 +1269,100 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
 
 /* -------------------- Profile -------------------- */
 
-function ProfileSheet({ onClose, wallet, collection, username, summary, onRegister }: {
+function ProfileSheet({ onClose, wallet, collection, username, summary, onRegister, onAvatarChange }: {
   onClose: () => void; wallet: string | null; collection: Discovery[];
   username: string | null; summary: ProfileSummary | null; onRegister: () => void;
+  onAvatarChange: (dataUrl: string) => void | Promise<void>;
 }) {
   const cards = collection.filter(c => c.kind === "CARD");
   const facts = collection.filter(c => c.kind === "FACT");
   const stables = collection.filter(c => c.kind === "USDM");
   const [tab, setTab] = useState<"CARDS" | "FACTS" | "REWARDS">("CARDS");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarUrl = summary?.avatar_url ?? null;
+
+  const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { setAvatarError("Please choose an image file."); return; }
+    if (file.size > 8 * 1024 * 1024) { setAvatarError("Image too large (max 8MB)."); return; }
+    setAvatarError(null);
+    setUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = dataUrl;
+      });
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext("2d")!;
+      // cover-fit crop
+      const scale = Math.max(size / img.width, size / img.height);
+      const dw = img.width * scale, dh = img.height * scale;
+      ctx.drawImage(img, (size - dw) / 2, (size - dh) / 2, dw, dh);
+      const jpg = canvas.toDataURL("image/jpeg", 0.82);
+      await onAvatarChange(jpg);
+    } catch (err) {
+      setAvatarError((err as Error)?.message?.slice(0, 100) || "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <Sheet title="Profile" onClose={onClose} Icon={User}>
       <div className="stat-card rounded-2xl p-4 flex items-center gap-3">
-        <div className="w-14 h-14 rounded-2xl shrink-0" style={{ background: AVATAR_GRADIENTS[0] }} />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="relative w-16 h-16 rounded-2xl shrink-0 overflow-hidden active:scale-95 transition"
+          style={!avatarUrl ? { background: AVATAR_GRADIENTS[0] } : undefined}
+          aria-label="Change avatar"
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Your avatar" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <User className="w-8 h-8 text-white" />
+            </div>
+          )}
+          <div className="absolute bottom-0 inset-x-0 bg-black/55 flex items-center justify-center py-0.5">
+            {uploading ? (
+              <Loader2 className="w-3 h-3 text-white animate-spin" />
+            ) : (
+              <Camera className="w-3 h-3 text-white" />
+            )}
+          </div>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarFile}
+        />
         <div className="flex-1 min-w-0">
-          <div className="font-display text-xl truncate">{username ? username.toUpperCase() : "UNCLAIMED"}</div>
-          <div className="text-[11px] text-muted-foreground truncate">{wallet ? shortAddr(wallet) : "Wallet not connected"}</div>
+          <div className="font-display text-xl truncate">{username ? `@${username}` : "UNCLAIMED"}</div>
+          {!username && wallet && (
+            <div className="text-[11px] text-muted-foreground truncate">{shortAddr(wallet)}</div>
+          )}
+          {!wallet && (
+            <div className="text-[11px] text-muted-foreground truncate">Wallet not connected</div>
+          )}
+          {avatarError && <div className="text-[10px] text-destructive mt-1">{avatarError}</div>}
           {(() => {
             const xp = summary?.xp ?? collection.filter(c => c.kind === "XP").reduce((s, c) => s + (c.amountRaw ?? 0), 0);
             const level = summary?.level ?? Math.max(1, Math.floor(xp / 500) + 1);
