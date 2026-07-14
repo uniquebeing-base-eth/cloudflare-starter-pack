@@ -241,8 +241,9 @@ export const getLeaderboard = createServerFn({ method: "GET" })
     const supabasePublic = getSupabasePublic();
     const { data: rows, error } = await supabasePublic
       .from("profiles")
-      .select("username, wallet, xp, packs_shredded")
+      .select("username, wallet, xp, packs_shredded, avatar_url")
       .order("xp", { ascending: false })
+      .order("packs_shredded", { ascending: false })
       .limit(50);
     if (error) return [];
     return (rows ?? []).map((row) => ({ ...row, range: data.range })) as Array<{
@@ -250,6 +251,7 @@ export const getLeaderboard = createServerFn({ method: "GET" })
       wallet: string | null;
       xp: number;
       packs_shredded: number;
+      avatar_url: string | null;
       range: string;
     }>;
   });
