@@ -476,7 +476,7 @@ function HomeScreen() {
         } else {
           setProfileSummary(null);
         }
-        setCollection(((discoveryRows as Array<{ kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null }> | undefined) ?? []).map(toUiDiscovery));
+        setCollection(((discoveryRows as Array<{ kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null; tx_hash?: string | null; created_at?: string | null }> | undefined) ?? []).map(toUiDiscovery));
         const nextCooldown = cooldown as { active?: boolean; until?: string | null } | undefined;
         const untilMs = nextCooldown?.until ? new Date(nextCooldown.until).getTime() : 0;
         setStarterCooldown(!!nextCooldown?.active && untilMs > Date.now());
