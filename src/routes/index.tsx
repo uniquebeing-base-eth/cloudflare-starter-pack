@@ -1190,9 +1190,11 @@ function LiveTicker({ event, idx }: { event: LiveEvent; idx: number }) {
           <span className="w-1 h-1 rounded-full bg-shred animate-pulse" /> LIVE
         </div>
         <div
-          className="w-4 h-4 rounded-full shrink-0"
+          className="w-5 h-5 rounded-full shrink-0 overflow-hidden"
           style={{ background: AVATAR_GRADIENTS[idx % AVATAR_GRADIENTS.length] }}
-        />
+        >
+          {event.avatar_url && <img src={event.avatar_url} alt="" className="w-full h-full object-cover" />}
+        </div>
         <div className="text-[10px] flex-1 truncate min-w-0">
           <span className="font-bold">{event.user}</span>{" "}
           <span className="text-muted-foreground">{event.text}</span>{" "}
