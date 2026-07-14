@@ -208,6 +208,19 @@ export const distributeReward = createServerFn({ method: "POST" })
 
       if (ok) {
         console.info("[reward] ✓ Success", { hash, amount, claimId });
+        // Attach payout tx hash to the most recent matching USDM discovery so
+        // the Rewards tab can show a Celoscan link. Best-effort — do not fail
+        // the payout if the write fails.
+        try {
+          const { getSupabasePublic } = await import("./supabase-public.server");
+          await getSupabasePublic().rpc("set_reward_tx_hash", {
+            _wallet: normalizedWallet,
+            _amount: amount,
+            _tx_hash: hash,
+          });
+        } catch (e) {
+          console.warn("[reward] failed to attach tx hash to discovery", { error: (e as Error)?.message });
+        }
       }
 
       return {
