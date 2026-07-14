@@ -825,9 +825,13 @@ function HomeScreen() {
               aria-label="Profile"
             >
               <div className="icon-tile w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden group-active:scale-95 transition">
-                <div className="w-full h-full flex items-center justify-center" style={{ background: AVATAR_GRADIENTS[0] }}>
-                  <User className="w-4 h-4 text-white" />
-                </div>
+                {profileSummary?.avatar_url ? (
+                  <img src={profileSummary.avatar_url} alt="You" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center" style={{ background: AVATAR_GRADIENTS[0] }}>
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                )}
               </div>
               <span className="text-[7px] font-semibold tracking-[0.16em] text-muted-foreground">PROFILE</span>
             </button>
