@@ -4,6 +4,7 @@ export type StoredProfile = {
   xp: number;
   packs_shredded: number;
   level: number;
+  avatar_url?: string | null;
 };
 
 export function normalizeWallet(wallet: string | null | undefined): string | null {
