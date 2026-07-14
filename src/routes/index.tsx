@@ -495,6 +495,7 @@ function HomeScreen() {
       const nextSnapshot = snapshot as {
         packStats?: Record<string, { owners: number; shreds: number; drops: number }>;
         globalStats?: { shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number };
+        avatarByWallet?: Record<string, string>;
         liveFeed?: Array<{ username: string; wallet: string | null; pack_id: string | null; kind: string; text: string; amount: number | string | null }>;
       };
 
@@ -506,8 +507,11 @@ function HomeScreen() {
         setGlobalStats(nextSnapshot.globalStats);
       }
 
+      const nextAvatarMap = nextSnapshot.avatarByWallet ?? {};
+      setAvatarByWallet(nextAvatarMap);
+
       if (nextSnapshot.liveFeed) {
-        const events = nextSnapshot.liveFeed.map((r) => feedRowToEvent(r)).reverse().reverse();
+        const events = nextSnapshot.liveFeed.map((r) => feedRowToEvent(r, nextAvatarMap));
         setLiveEvents(events);
       }
     } catch (error) {
