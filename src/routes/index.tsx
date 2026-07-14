@@ -464,7 +464,7 @@ function HomeScreen() {
           callListMyDiscoveries({ data: { wallet: wallet.address } }),
           callGetStarterCooldown({ data: { wallet: wallet.address } }),
         ]);
-        const nextProfile = profile as { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null } | null;
+        const nextProfile = profile as { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null; level?: number | null; avatar_url?: string | null } | null;
         if (nextProfile?.username) {
           setUsername(nextProfile.username);
         } else {
