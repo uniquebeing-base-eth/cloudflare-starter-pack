@@ -654,7 +654,7 @@ function HomeScreen() {
         rarity: i.rarity,
         amount: i.amountRaw,
       }));
-      const label = username ?? (wallet.address ? shortAddr(wallet.address) : "Shredder");
+      const label = username && username.length > 0 ? username : undefined;
       void (async () => {
         try {
           if (!wallet.address) throw new Error("Connect your wallet before shredding.");
