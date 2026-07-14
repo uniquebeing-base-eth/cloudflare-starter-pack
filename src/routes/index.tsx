@@ -1231,10 +1231,19 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
       ) : (
         <div className="space-y-2">
           {leaderboard.map((row, index) => (
-            <div key={`${row.wallet ?? row.username ?? index}`} className="stat-card rounded-xl px-3 py-2 flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred">#{index + 1}</div>
+            <div key={`${row.wallet ?? row.username ?? index}`} className="stat-card rounded-xl px-2.5 py-2 flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{index + 1}</div>
+              <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }}>
+                {row.avatar_url ? (
+                  <img src={row.avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate">{row.username ?? shortAddr(row.wallet)}</div>
+                <div className="font-bold text-sm truncate">{row.username ? `@${row.username}` : shortAddr(row.wallet)}</div>
                 <div className="text-[10px] text-muted-foreground">{row.packs_shredded} packs · {row.xp} XP</div>
               </div>
             </div>
