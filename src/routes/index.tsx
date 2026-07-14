@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ChangeEvent } from "react";
 import {
   Trophy, User, Users, Package, Gem, Wallet, Flame, Gift, Star,
   Lightbulb, X, ChevronLeft, ChevronRight, Award, Zap,
-  ArrowRight, AlertTriangle, Check, Loader2, HelpCircle, ExternalLink,
+  ArrowRight, AlertTriangle, Check, Loader2, HelpCircle, ExternalLink, Camera,
 } from "lucide-react";
 import { BackgroundMusic } from "@/components/BackgroundMusic";
 import { useServerFn } from "@tanstack/react-start";
