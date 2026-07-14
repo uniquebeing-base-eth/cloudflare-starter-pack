@@ -197,13 +197,16 @@ type Discovery = {
   rarity?: "Common" | "Rare" | "Epic" | "Legendary";
   image?: string;
   amountRaw?: number;
+  txHash?: string | null;
+  createdAt?: string | null;
 };
 
-type LeaderboardRow = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; range: string };
-type ProfileSummary = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; level: number };
+type LeaderboardRow = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; avatar_url?: string | null; range: string };
+type ProfileSummary = { username: string | null; wallet: string | null; xp: number; packs_shredded: number; level: number; avatar_url?: string | null };
 
-function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null }): Discovery {
+function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?: string | null; amount?: number | null; tx_hash?: string | null; created_at?: string | null }): Discovery {
   const amount = typeof item.amount === "number" ? item.amount : undefined;
+  const base = { txHash: item.tx_hash ?? null, createdAt: item.created_at ?? null };
   switch (item.kind) {
     case "USDM":
       return {
@@ -215,6 +218,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: (item.rarity as Discovery["rarity"]) ?? "Common",
         image: DISCOVERY_IMG.usdm,
         amountRaw: amount,
+        ...base,
       };
     case "XP":
       return {
@@ -226,6 +230,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: (item.rarity as Discovery["rarity"]) ?? "Common",
         image: DISCOVERY_IMG.xp,
         amountRaw: amount,
+        ...base,
       };
     case "CARD":
       return {
@@ -237,6 +242,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: (item.rarity as Discovery["rarity"]) ?? "Rare",
         image: CARD_LIBRARY["neon-cube"],
         amountRaw: amount,
+        ...base,
       };
     default:
       return {
@@ -248,6 +254,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         rarity: "Common",
         image: DISCOVERY_IMG.fact,
         amountRaw: amount,
+        ...base,
       };
   }
 }
