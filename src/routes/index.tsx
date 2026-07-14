@@ -443,6 +443,7 @@ function HomeScreen() {
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>(LIVE_EVENTS_SEED);
   const [packStats, setPackStats] = useState<Record<string, { owners: number; shreds: number; drops: number }>>({});
   const [globalStats, setGlobalStats] = useState<{ shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number }>({ shredders: 0, packs_shredded: 0, discoveries: 0, rewards_usdm: 0 });
+  const [avatarByWallet, setAvatarByWallet] = useState<Record<string, string>>({});
   const wallet = useWallet();
   const callDistribute = useServerFn(distributeReward);
   
