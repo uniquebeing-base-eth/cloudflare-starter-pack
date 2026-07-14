@@ -928,6 +928,17 @@ function HomeScreen() {
           username={username}
           summary={profileSummary}
           onRegister={() => { setShowProfile(false); setShowUsernameModal(true); }}
+          onAvatarChange={async (dataUrl) => {
+            if (!wallet.address) return;
+            setProfileSummary((prev) => prev ? { ...prev, avatar_url: dataUrl } : prev);
+            try {
+              await callUpsertProfile({ data: { wallet: wallet.address, avatar_url: dataUrl } });
+              void refreshProfileAndLeaderboard();
+              void refreshStatsAndFeed();
+            } catch (e) {
+              console.error("[profile] avatar upload failed", e);
+            }
+          }}
         />
       )}
       {showOnboarding && <OnboardingOverlay onDone={finishOnboarding} />}
