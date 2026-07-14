@@ -328,30 +328,30 @@ function buildDiscoveries(packId: string): Discovery[] {
 
 // Live event feed — populated from real activity (Supabase realtime).
 // Starts empty; entries are prepended as they arrive.
-type LiveEvent = { user: string; text: string; accent: string; from: string };
+type LiveEvent = { user: string; text: string; accent: string; from: string; wallet: string | null; avatar_url?: string | null };
 const LIVE_EVENTS_SEED: LiveEvent[] = [];
 
 type FeedRow = { username: string; wallet: string | null; pack_id: string | null; kind: string; text: string; amount: number | string | null };
-function feedRowToEvent(r: FeedRow): LiveEvent {
+function feedRowToEvent(r: FeedRow, avatarByWallet: Record<string, string>): LiveEvent {
   const username = r.username ? (r.username.startsWith("@") ? r.username : `@${r.username}`) : "@Shredder";
-  // Normalize kind/amount/title into a friendly ticker message
+  const wallet = r.wallet ? r.wallet.toLowerCase() : null;
+  const avatar_url = wallet ? avatarByWallet[wallet] : null;
+  const base = { user: username, wallet, avatar_url } as const;
   if (r.kind === "USDM" || r.kind === "USDT") {
     const amt = typeof r.amount === "number" ? Number(r.amount) : r.amount ?? "";
-    return { user: username, text: "just got", accent: `${amt} ${r.kind.toLowerCase()}`, from: r.pack_id ?? "Shreds" };
+    return { ...base, text: "just got", accent: `${amt} ${r.kind.toLowerCase()}`, from: r.pack_id ?? "Shreds" };
   }
   if (r.kind === "CARD") {
-    // text was set to something like 'collected <title>' in the inserter
     const title = r.text?.replace(/^collected\s+/i, '') || r.kind;
-    return { user: username, text: "collected", accent: title, from: r.pack_id ?? "Shreds" };
+    return { ...base, text: "collected", accent: title, from: r.pack_id ?? "Shreds" };
   }
   if (r.kind === "FACT") {
     const fact = r.text || "a fact";
-    return { user: username, text: "discovered", accent: fact, from: r.pack_id ?? "Shreds" };
+    return { ...base, text: "discovered", accent: fact, from: r.pack_id ?? "Shreds" };
   }
-  // Fallback: use raw text split into verb + rest
   const [verb, ...rest] = (r.text || "").split(" ");
   return {
-    user: username,
+    ...base,
     text: verb || "shredded",
     accent: rest.join(" ") || r.kind,
     from: r.pack_id ?? "Shreds",
