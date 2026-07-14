@@ -1461,8 +1461,23 @@ function ProfileSheet({ onClose, wallet, collection, username, summary, onRegist
             {stables.map((s, i) => (
               <div key={i} className="stat-card rounded-xl p-3 flex items-center gap-3">
                 <img src={DISCOVERY_IMG.usdm} alt="" className="w-10 h-10 object-contain shrink-0" />
-                <div className="flex-1 font-bold">{s.title}</div>
-                <div className="text-[10px] text-muted-foreground tracking-widest">{s.sub}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{s.title}</div>
+                  {s.txHash ? (
+                    <a
+                      href={`https://celoscan.io/tx/${s.txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-shred flex items-center gap-1 mt-0.5 truncate"
+                    >
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">{s.txHash.slice(0, 10)}…{s.txHash.slice(-6)}</span>
+                    </a>
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Payout pending…</div>
+                  )}
+                </div>
+                <div className="text-[10px] text-muted-foreground tracking-widest shrink-0">{s.sub}</div>
               </div>
             ))}
           </div>
