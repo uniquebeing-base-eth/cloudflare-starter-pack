@@ -12,6 +12,7 @@ const ProfileUpsertInput = z.object({
   xp: z.number().int().nonnegative().optional(),
   packs_shredded: z.number().int().nonnegative().optional(),
   level: z.number().int().positive().optional(),
+  avatar_url: z.string().max(60000).optional(),
 });
 
 const SHRED_PACKS = ["starter", "mystery", "alpha", "legendary", "explorer"] as const;
@@ -29,6 +30,7 @@ export const upsertProfile = createServerFn({ method: "POST" })
       _xp: data.xp,
       _packs_shredded: data.packs_shredded,
       _level: data.level,
+      _avatar_url: data.avatar_url,
     });
     if (error) throw new Error(error.message);
     return { ok: true };
