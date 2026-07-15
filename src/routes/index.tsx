@@ -66,6 +66,10 @@ export const CARD_LIBRARY: Record<string, string> = {
   "minipay-prism": "/cards/minipay-prism.png",
   "celo-sentinel": "/cards/celo-sentinel.png",
   "minipay-transceiver": "/cards/minipay-transceiver.png",
+  "data-shard": "/cards/data-shard.png",
+  "minipay-oracle": "/cards/minipay-oracle.png",
+  "celo-prime-shard": "/cards/celo-prime-shard.png",
+  "verity-node": "/cards/verity-node.png",
 };
 
 export const Route = createFileRoute("/")({ component: HomeScreen });
