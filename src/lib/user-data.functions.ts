@@ -24,16 +24,26 @@ export const upsertProfile = createServerFn({ method: "POST" })
     const normalizedWallet = normalizeWallet(data.wallet) ?? data.wallet.toLowerCase();
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
+
+    // If no username was supplied, try to recover the wallet's on-chain identity
+    // from the Celo username registry so leaderboard rows show @handle not 0x…
+    let username = data.username;
+    if (!username || username.trim().length === 0) {
+      const { resolveOnchainUsername } = await import("./onchain-username.server");
+      const resolved = await resolveOnchainUsername(normalizedWallet);
+      if (resolved) username = resolved;
+    }
+
     const { error } = await supabasePublic.rpc("upsert_wallet_profile", {
       _wallet: normalizedWallet,
-      _username: data.username,
+      _username: username,
       _xp: data.xp,
       _packs_shredded: data.packs_shredded,
       _level: data.level,
       _avatar_url: data.avatar_url,
     });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, username: username ?? null };
   });
 
 export const getMyProfile = createServerFn({ method: "GET" })
@@ -92,9 +102,14 @@ export const recordShred = createServerFn({ method: "POST" })
       rarity: i.rarity ?? "Common",
       amount: i.amount ?? null,
     }));
+    let username = data.username;
+    if (!username || username.trim().length === 0) {
+      const { resolveOnchainUsername } = await import("./onchain-username.server");
+      username = (await resolveOnchainUsername(normalizedWallet)) ?? undefined;
+    }
     const { data: result, error } = await supabasePublic.rpc("record_wallet_shred", {
       _wallet: normalizedWallet,
-      _username: data.username ?? "",
+      _username: username ?? "",
       _pack_id: data.packId,
       _items: items as Json,
     });
@@ -246,6 +261,30 @@ export const getLeaderboard = createServerFn({ method: "GET" })
       .order("packs_shredded", { ascending: false })
       .limit(50);
     if (error) return [];
+
+    // Lazily backfill on-chain usernames for leaderboard rows that are still
+    // showing a bare wallet address. Resolves at most 50 wallets, cached in
+    // memory for 10 minutes so repeated fetches are cheap.
+    const missing = (rows ?? []).filter((r) => r.wallet && (!r.username || r.username.trim().length === 0));
+    if (missing.length > 0) {
+      const { resolveOnchainUsername } = await import("./onchain-username.server");
+      await Promise.all(
+        missing.map(async (r) => {
+          const name = await resolveOnchainUsername(r.wallet as string);
+          if (!name) return;
+          r.username = name;
+          try {
+            await supabasePublic.rpc("upsert_wallet_profile", {
+              _wallet: (r.wallet as string).toLowerCase(),
+              _username: name,
+            });
+          } catch (e) {
+            console.warn("[leaderboard] backfill upsert failed", { wallet: r.wallet, error: (e as Error)?.message });
+          }
+        }),
+      );
+    }
+
     return (rows ?? []).map((row) => ({ ...row, range: data.range })) as Array<{
       username: string | null;
       wallet: string | null;
