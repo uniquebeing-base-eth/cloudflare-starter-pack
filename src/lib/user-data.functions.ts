@@ -24,16 +24,26 @@ export const upsertProfile = createServerFn({ method: "POST" })
     const normalizedWallet = normalizeWallet(data.wallet) ?? data.wallet.toLowerCase();
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
+
+    // If no username was supplied, try to recover the wallet's on-chain identity
+    // from the Celo username registry so leaderboard rows show @handle not 0x…
+    let username = data.username;
+    if (!username || username.trim().length === 0) {
+      const { resolveOnchainUsername } = await import("./onchain-username.server");
+      const resolved = await resolveOnchainUsername(normalizedWallet);
+      if (resolved) username = resolved;
+    }
+
     const { error } = await supabasePublic.rpc("upsert_wallet_profile", {
       _wallet: normalizedWallet,
-      _username: data.username,
+      _username: username,
       _xp: data.xp,
       _packs_shredded: data.packs_shredded,
       _level: data.level,
       _avatar_url: data.avatar_url,
     });
     if (error) throw new Error(error.message);
-    return { ok: true };
+    return { ok: true, username: username ?? null };
   });
 
 export const getMyProfile = createServerFn({ method: "GET" })
