@@ -102,9 +102,14 @@ export const recordShred = createServerFn({ method: "POST" })
       rarity: i.rarity ?? "Common",
       amount: i.amount ?? null,
     }));
+    let username = data.username;
+    if (!username || username.trim().length === 0) {
+      const { resolveOnchainUsername } = await import("./onchain-username.server");
+      username = (await resolveOnchainUsername(normalizedWallet)) ?? undefined;
+    }
     const { data: result, error } = await supabasePublic.rpc("record_wallet_shred", {
       _wallet: normalizedWallet,
-      _username: data.username ?? "",
+      _username: username ?? "",
       _pack_id: data.packId,
       _items: items as Json,
     });
