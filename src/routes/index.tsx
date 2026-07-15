@@ -1188,9 +1188,11 @@ function PackImage({ pack, className }: { pack: Pack; className?: string }) {
 
 const RARITY_COLOR: Record<string, string> = {
   Common: "oklch(0.7 0.05 150)",
+  Uncommon: "oklch(0.78 0.18 145)",
   Rare: "oklch(0.7 0.2 250)",
   Epic: "oklch(0.7 0.22 300)",
   Legendary: "oklch(0.82 0.17 85)",
+  Mythic: "oklch(0.75 0.25 350)",
 };
 
 function RevealOverlay({ phase, reveals, pack, onClose }: {
