@@ -263,24 +263,82 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
   }
 }
 
-const XPS: Discovery[] = [
-  { kind: "XP", title: "50 XP", sub: "Experience Points", color: "oklch(0.7 0.2 250)", Icon: Star, rarity: "Common", image: DISCOVERY_IMG.xp, amountRaw: 50 },
-  { kind: "XP", title: "150 XP", sub: "Experience Points", color: "oklch(0.7 0.2 250)", Icon: Star, rarity: "Rare", image: DISCOVERY_IMG.xp, amountRaw: 150 },
-  { kind: "XP", title: "500 XP", sub: "Experience Points", color: "oklch(0.7 0.2 250)", Icon: Star, rarity: "Epic", image: DISCOVERY_IMG.xp, amountRaw: 500 },
-];
-const CARDS: Discovery[] = [
+/* -------------------- Card collections --------------------
+ * Structured to make adding new collections trivial: append a new entry to
+ * CARDS with an `image` key from CARD_LIBRARY, and (optionally) drop it into
+ * a specific `packs` array to weight where it can appear. If `packs` is
+ * omitted the card is eligible for every pack. Rarity drives visual accent
+ * and roughly the drop probability inside a given pack.
+ */
+type CardDef = Discovery & { packs?: string[] };
+const CARDS: CardDef[] = [
+  // Rare
   { kind: "CARD", title: "Neon Cube", sub: "Chance. Mystery. Reward.", color: "oklch(0.75 0.18 180)", Icon: Award, rarity: "Rare", image: CARD_LIBRARY["neon-cube"] },
   { kind: "CARD", title: "Celo Compass", sub: "Navigate the Celo ecosystem.", color: "oklch(0.75 0.2 145)", Icon: Award, rarity: "Rare", image: CARD_LIBRARY["celo-compass"] },
   { kind: "CARD", title: "MiniPay Sigil", sub: "Trust. Connect. Transfer.", color: "oklch(0.7 0.22 300)", Icon: Award, rarity: "Rare", image: CARD_LIBRARY["minipay-sigil"] },
+  { kind: "CARD", title: "Data Shard", sub: "Fragments that remember.", color: "oklch(0.78 0.2 200)", Icon: Award, rarity: "Rare", image: CARD_LIBRARY["data-shard"] },
+  // Uncommon
+  { kind: "CARD", title: "Verity Node", sub: "Truth in data. Power in trust.", color: "oklch(0.82 0.22 135)", Icon: Award, rarity: "Uncommon", image: CARD_LIBRARY["verity-node"] },
+  // Epic
   { kind: "CARD", title: "Celo Orbis", sub: "The heart of decentralized trust.", color: "oklch(0.7 0.22 300)", Icon: Award, rarity: "Epic", image: CARD_LIBRARY["celo-orbis"] },
   { kind: "CARD", title: "Celo Relic Ring", sub: "Powered by legacy.", color: "oklch(0.85 0.22 130)", Icon: Award, rarity: "Epic", image: CARD_LIBRARY["celo-relic-ring"] },
   { kind: "CARD", title: "Trust Lens", sub: "See beyond. Trust deeper.", color: "oklch(0.7 0.22 300)", Icon: Award, rarity: "Epic", image: CARD_LIBRARY["trust-lens"] },
   { kind: "CARD", title: "Celo Sentinel", sub: "Protect. Verify. Empower.", color: "oklch(0.82 0.22 135)", Icon: Award, rarity: "Epic", image: CARD_LIBRARY["celo-sentinel"] },
   { kind: "CARD", title: "MiniPay Transceiver", sub: "Send value. Anywhere. Instantly.", color: "oklch(0.7 0.22 300)", Icon: Award, rarity: "Epic", image: CARD_LIBRARY["minipay-transceiver"] },
-  { kind: "CARD", title: "Celo Genesis Core", sub: "Trust isn't given. It's protocol.", color: "oklch(0.82 0.17 85)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["celo-genesis-core"] },
-  { kind: "CARD", title: "Celo Genesis Shard", sub: "Origins power everything.", color: "oklch(0.82 0.17 85)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["celo-genesis-shard"] },
-  { kind: "CARD", title: "MiniPay Prism", sub: "Value flows. Trust remains.", color: "oklch(0.85 0.22 130)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["minipay-prism"] },
+  // Legendary
+  { kind: "CARD", title: "Celo Genesis Core", sub: "Trust isn't given. It's protocol.", color: "oklch(0.82 0.17 85)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["celo-genesis-core"], packs: ["legendary", "explorer", "alpha"] },
+  { kind: "CARD", title: "Celo Genesis Shard", sub: "Origins power everything.", color: "oklch(0.82 0.17 85)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["celo-genesis-shard"], packs: ["legendary", "explorer", "alpha"] },
+  { kind: "CARD", title: "MiniPay Prism", sub: "Value flows. Trust remains.", color: "oklch(0.85 0.22 130)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["minipay-prism"], packs: ["legendary", "explorer", "alpha"] },
+  { kind: "CARD", title: "MiniPay Oracle", sub: "See intent. Shape impact.", color: "oklch(0.7 0.22 300)", Icon: Award, rarity: "Legendary", image: CARD_LIBRARY["minipay-oracle"], packs: ["legendary", "explorer", "alpha"] },
+  // Mythic — explorer-only jackpot
+  { kind: "CARD", title: "Celo Prime Shard", sub: "Rare origin. Limitless destiny.", color: "oklch(0.75 0.25 350)", Icon: Award, rarity: "Mythic", image: CARD_LIBRARY["celo-prime-shard"], packs: ["explorer", "legendary"] },
 ];
+
+// Card-title → image resolver used when hydrating server-persisted discoveries.
+export const CARD_IMAGE_BY_TITLE: Record<string, string> = CARDS.reduce((acc, c) => {
+  if (c.image) acc[c.title.toLowerCase()] = c.image;
+  return acc;
+}, {} as Record<string, string>);
+
+// Fixed XP per pack — every successful shred awards exactly this much XP.
+const PACK_XP: Record<string, number> = {
+  starter: 100,
+  mystery: 200,
+  alpha: 400,
+  legendary: 800,
+  explorer: 1600,
+};
+
+// Rarity weights per pack — higher tiers see more Epic/Legendary/Mythic drops.
+const PACK_RARITY_WEIGHTS: Record<string, Partial<Record<NonNullable<Discovery["rarity"]>, number>>> = {
+  starter:   { Common: 60, Uncommon: 30, Rare: 10 },
+  mystery:   { Uncommon: 45, Rare: 40, Epic: 15 },
+  alpha:     { Rare: 45, Epic: 40, Legendary: 15 },
+  legendary: { Epic: 40, Legendary: 55, Mythic: 5 },
+  explorer:  { Epic: 30, Legendary: 55, Mythic: 15 },
+};
+
+// Probability the pack drops a card at all (in addition to the fact/XP/USDM).
+const PACK_CARD_CHANCE: Record<string, number> = {
+  starter: 0.4,
+  mystery: 0.6,
+  alpha: 0.8,
+  legendary: 1,
+  explorer: 1,
+};
+
+function pickCardForPack(packId: string): CardDef | null {
+  const eligible = CARDS.filter((c) => !c.packs || c.packs.includes(packId));
+  if (eligible.length === 0) return null;
+  const weights = PACK_RARITY_WEIGHTS[packId] ?? PACK_RARITY_WEIGHTS.mystery;
+  const weighted = eligible.map((c) => ({ card: c, w: weights[c.rarity ?? "Common"] ?? 1 }));
+  const total = weighted.reduce((s, x) => s + x.w, 0);
+  let n = Math.random() * total;
+  for (const { card, w } of weighted) {
+    if ((n -= w) <= 0) return card;
+  }
+  return eligible[0];
+}
 
 function pickRandom<T>(arr: T[]): T { return arr[Math.floor(Math.random() * arr.length)]; }
 function fmtNum(n: number): string {
@@ -314,8 +372,23 @@ function buildDiscoveries(packId: string): Discovery[] {
     image: DISCOVERY_IMG.usdm,
     amountRaw: usdm,
   });
-  if (Math.random() > 0.4) items.push({ ...pickRandom(XPS) });
-  if (Math.random() > 0.55) items.push({ ...pickRandom(CARDS) });
+  // Fixed XP per pack — always awarded on a successful shred.
+  const xpAmount = PACK_XP[packId] ?? 100;
+  items.push({
+    kind: "XP",
+    title: `${xpAmount} XP`,
+    sub: "Experience Points",
+    color: "oklch(0.7 0.2 250)",
+    Icon: Star,
+    rarity: xpAmount >= 800 ? "Legendary" : xpAmount >= 400 ? "Epic" : xpAmount >= 200 ? "Rare" : "Common",
+    image: DISCOVERY_IMG.xp,
+    amountRaw: xpAmount,
+  });
+  // Card drop — weighted by pack tier.
+  if (Math.random() < (PACK_CARD_CHANCE[packId] ?? 0.5)) {
+    const card = pickCardForPack(packId);
+    if (card) items.push({ ...card });
+  }
   // Fact
   const fact = FACTS[Math.floor(Math.random() * FACTS.length)];
   items.push({
