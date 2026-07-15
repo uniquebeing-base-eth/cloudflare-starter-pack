@@ -198,7 +198,7 @@ const FACTS: string[] = [
 type Discovery = {
   kind: "USDM" | "XP" | "CARD" | "FACT";
   title: string; sub: string; color: string; Icon: React.ComponentType<{ className?: string }>;
-  rarity?: "Common" | "Rare" | "Epic" | "Legendary";
+  rarity?: "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary" | "Mythic";
   image?: string;
   amountRaw?: number;
   txHash?: string | null;
