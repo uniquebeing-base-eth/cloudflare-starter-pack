@@ -68,7 +68,7 @@ const DiscoveryInput = z.object({
     kind: z.enum(["USDM", "USDT", "XP", "CARD", "FACT"]),
     title: z.string(),
     sub: z.string(),
-    rarity: z.enum(["Common", "Rare", "Epic", "Legendary"]).optional(),
+    rarity: z.enum(["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]).optional(),
     amount: z.number().optional(), // USDM/USDT amount or XP points
   })).min(1).max(8),
 });
