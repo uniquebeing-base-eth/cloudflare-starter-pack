@@ -244,7 +244,7 @@ function toUiDiscovery(item: { kind: string; title: string; sub: string; rarity?
         color: "oklch(0.75 0.18 180)",
         Icon: Award,
         rarity: (item.rarity as Discovery["rarity"]) ?? "Rare",
-        image: CARD_LIBRARY["neon-cube"],
+        image: CARD_IMAGE_BY_TITLE[item.title.toLowerCase()] ?? CARD_LIBRARY["neon-cube"],
         amountRaw: amount,
         ...base,
       };
