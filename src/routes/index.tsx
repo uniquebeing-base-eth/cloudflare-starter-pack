@@ -521,6 +521,10 @@ function HomeScreen() {
   const [packStats, setPackStats] = useState<Record<string, { owners: number; shreds: number; drops: number }>>({});
   const [globalStats, setGlobalStats] = useState<{ shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number }>({ shredders: 0, packs_shredded: 0, discoveries: 0, rewards_usdm: 0 });
   const [avatarByWallet, setAvatarByWallet] = useState<Record<string, string>>({});
+  // Holds the on-chain orderId of the most-recently-verified paid purchase.
+  // Consumed by executeShred so distributeReward can claim it atomically —
+  // one verified purchase = one reward. Cleared after the payout attempt.
+  const pendingOrderIdRef = useRef<string | null>(null);
   const wallet = useWallet();
   const callDistribute = useServerFn(distributeReward);
   
