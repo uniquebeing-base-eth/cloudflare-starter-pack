@@ -521,6 +521,10 @@ function HomeScreen() {
   const [packStats, setPackStats] = useState<Record<string, { owners: number; shreds: number; drops: number }>>({});
   const [globalStats, setGlobalStats] = useState<{ shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number }>({ shredders: 0, packs_shredded: 0, discoveries: 0, rewards_usdm: 0 });
   const [avatarByWallet, setAvatarByWallet] = useState<Record<string, string>>({});
+  // Holds the on-chain orderId of the most-recently-verified paid purchase.
+  // Consumed by executeShred so distributeReward can claim it atomically —
+  // one verified purchase = one reward. Cleared after the payout attempt.
+  const pendingOrderIdRef = useRef<string | null>(null);
   const wallet = useWallet();
   const callDistribute = useServerFn(distributeReward);
   
@@ -751,13 +755,16 @@ function HomeScreen() {
           const usdmAmount = typeof usdmItem?.amountRaw === "number" ? usdmItem.amountRaw : 0;
           if (usdmItem && usdmAmount > 0) {
             const nonce = `${wallet.address.toLowerCase()}-${pack.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-            console.info("[reward] ✓ Sending payout", { packId: pack.id, amountUsdm: usdmAmount });
+            const orderId = pendingOrderIdRef.current ?? undefined;
+            pendingOrderIdRef.current = null;
+            console.info("[reward] ✓ Sending payout", { packId: pack.id, amountUsdm: usdmAmount, orderId });
             const result = await callDistribute({
               data: {
                 wallet: wallet.address,
                 packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer",
                 amountUsdm: usdmAmount,
                 nonce,
+                orderId,
               },
             });
             if (!result.ok) {
@@ -810,9 +817,11 @@ function HomeScreen() {
       setBuying(true); setBuyError(null);
       try {
         const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth);
+        // recordPackPurchase now verifies the txHash on-chain server-side;
+        // if the wallet only sent an ERC20 approve() without the follow-up
+        // transferFrom, the server rejects here and no reward can be claimed.
         await callRecordPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer", orderId: purchase.orderId, txHash: purchase.txHash, priceUsdm: pack.priceNum } });
-        // Do not persist a "purchased" entry — paid packs are single-use.
-        // The user must pay for each shred; prevent permanent unlocking.
+        pendingOrderIdRef.current = purchase.orderId;
         setBuying(false);
         executeShred();
       } catch (e: unknown) {

@@ -228,10 +228,23 @@ export const recordPackPurchase = createServerFn({ method: "POST" })
     wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
     packId: z.enum(SHRED_PACKS),
     orderId: z.string().min(1).max(128),
-    txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
-    priceUsdm: z.number().nonnegative(),
+    txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+    priceUsdm: z.number().positive(),
   }).parse(raw))
   .handler(async ({ data }) => {
+    // CRITICAL: verify the on-chain payment before recording the purchase.
+    // Without this check, a client can call recordPackPurchase with any
+    // orderId / txHash / price and unlock a reward payout without paying.
+    const { verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
+    const ok = await verifyPackPurchaseOnChain({
+      wallet: data.wallet,
+      txHash: data.txHash,
+      priceUsdm: data.priceUsdm,
+    });
+    if (!ok.valid) {
+      console.error("[purchase] ✗ On-chain verification failed", { wallet: data.wallet, txHash: data.txHash, reason: ok.reason });
+      throw new Error(`Purchase verification failed: ${ok.reason}`);
+    }
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
     const { error } = await supabasePublic.rpc("record_wallet_pack_purchase", {
@@ -242,8 +255,10 @@ export const recordPackPurchase = createServerFn({ method: "POST" })
       _price_usdm: data.priceUsdm,
     });
     if (error && !/duplicate key/i.test(error.message)) throw new Error(error.message);
-    return { ok: true };
+    console.info("[purchase] ✓ Verified and recorded", { wallet: data.wallet, packId: data.packId, orderId: data.orderId, txHash: data.txHash });
+    return { ok: true, orderId: data.orderId };
   });
+
 
 /* -------------------- Leaderboard -------------------- */
 

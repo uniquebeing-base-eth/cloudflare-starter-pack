@@ -31,7 +31,12 @@ const Input = z.object({
   packId: z.enum(["starter", "mystery", "alpha", "legendary", "explorer"]),
   amountUsdm: z.number().min(0).max(20),
   nonce: z.string().min(4).max(128),
+  // Required for every paid pack: the on-chain orderId whose payment was
+  // already verified by recordPackPurchase. One purchase authorises exactly
+  // one reward payout (atomic claim in `claim_pack_purchase_for_reward`).
+  orderId: z.string().min(1).max(128).optional(),
 });
+
 
 export const distributeReward = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => Input.parse(raw))
@@ -60,6 +65,40 @@ export const distributeReward = createServerFn({ method: "POST" })
       console.info("[reward] skipped zero reward", { packId: data.packId });
       return { ok: true, skipped: true, amount: 0 };
     }
+
+    // CRITICAL: paid packs require an on-chain-verified purchase whose
+    // reward slot has not been consumed yet. Starter is the only free pack.
+    // The atomic RPC flips reward_paid false→true in a single UPDATE and
+    // returns true only on the first successful claim, so a client cannot
+    // replay the same orderId to pull multiple payouts. Combined with the
+    // on-chain verification inside recordPackPurchase (approve()-only txs
+    // are rejected because no USDM Transfer to the payment contract is
+    // present in the receipt), this is the sole authorisation for a paid
+    // reward — no reward is issued without a matching, unclaimed purchase.
+    if (data.packId !== "starter") {
+      if (!data.orderId) {
+        console.error("[reward] paid pack missing orderId", { wallet: data.wallet, packId: data.packId });
+        return { ok: false, error: "missing_order_id" };
+      }
+      const { getSupabasePublic } = await import("./supabase-public.server");
+      const supabasePublic = getSupabasePublic();
+      const { data: claimed, error: claimErr } = await supabasePublic.rpc(
+        "claim_pack_purchase_for_reward",
+        { _wallet: data.wallet.toLowerCase(), _pack_id: data.packId, _order_id: data.orderId },
+      );
+      if (claimErr) {
+        console.error("[reward] claim rpc failed", { error: claimErr.message });
+        return { ok: false, error: "claim_rpc_failed" };
+      }
+      if (!claimed) {
+        console.warn("[reward] purchase not found or already claimed", {
+          wallet: data.wallet, packId: data.packId, orderId: data.orderId,
+        });
+        return { ok: false, error: "purchase_not_found_or_already_claimed" };
+      }
+      console.info("[reward] ✓ Purchase claimed for reward", { orderId: data.orderId });
+    }
+
 
     const [viem, { privateKeyToAccount }, { celo }] = await Promise.all([
       import("viem"),

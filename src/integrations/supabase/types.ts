@@ -120,6 +120,8 @@ export type Database = {
           order_id: string
           pack_id: string
           price_usdm: number
+          reward_paid: boolean
+          reward_tx_hash: string | null
           tx_hash: string | null
           user_id: string
         }
@@ -129,6 +131,8 @@ export type Database = {
           order_id: string
           pack_id: string
           price_usdm: number
+          reward_paid?: boolean
+          reward_tx_hash?: string | null
           tx_hash?: string | null
           user_id: string
         }
@@ -138,6 +142,8 @@ export type Database = {
           order_id?: string
           pack_id?: string
           price_usdm?: number
+          reward_paid?: boolean
+          reward_tx_hash?: string | null
           tx_hash?: string | null
           user_id?: string
         }
@@ -289,6 +295,10 @@ export type Database = {
         }
         Returns: string
       }
+      claim_pack_purchase_for_reward: {
+        Args: { _order_id: string; _pack_id: string; _wallet: string }
+        Returns: boolean
+      }
       increment_shred_stats: {
         Args: { _pack: string; _user: string; _xp: number }
         Returns: undefined
@@ -380,6 +390,10 @@ export type Database = {
               isSetofReturn: false
             }
           }
+      verify_pack_purchase_exists: {
+        Args: { _order_id: string; _pack_id: string; _wallet: string }
+        Returns: boolean
+      }
       wallet_profile_id: { Args: { _wallet: string }; Returns: string }
     }
     Enums: {
