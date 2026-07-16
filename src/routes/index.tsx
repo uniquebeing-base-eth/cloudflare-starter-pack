@@ -755,13 +755,16 @@ function HomeScreen() {
           const usdmAmount = typeof usdmItem?.amountRaw === "number" ? usdmItem.amountRaw : 0;
           if (usdmItem && usdmAmount > 0) {
             const nonce = `${wallet.address.toLowerCase()}-${pack.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-            console.info("[reward] ✓ Sending payout", { packId: pack.id, amountUsdm: usdmAmount });
+            const orderId = pendingOrderIdRef.current ?? undefined;
+            pendingOrderIdRef.current = null;
+            console.info("[reward] ✓ Sending payout", { packId: pack.id, amountUsdm: usdmAmount, orderId });
             const result = await callDistribute({
               data: {
                 wallet: wallet.address,
                 packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer",
                 amountUsdm: usdmAmount,
                 nonce,
+                orderId,
               },
             });
             if (!result.ok) {
