@@ -817,9 +817,11 @@ function HomeScreen() {
       setBuying(true); setBuyError(null);
       try {
         const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth);
+        // recordPackPurchase now verifies the txHash on-chain server-side;
+        // if the wallet only sent an ERC20 approve() without the follow-up
+        // transferFrom, the server rejects here and no reward can be claimed.
         await callRecordPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer", orderId: purchase.orderId, txHash: purchase.txHash, priceUsdm: pack.priceNum } });
-        // Do not persist a "purchased" entry — paid packs are single-use.
-        // The user must pay for each shred; prevent permanent unlocking.
+        pendingOrderIdRef.current = purchase.orderId;
         setBuying(false);
         executeShred();
       } catch (e: unknown) {
