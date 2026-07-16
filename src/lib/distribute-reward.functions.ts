@@ -31,7 +31,12 @@ const Input = z.object({
   packId: z.enum(["starter", "mystery", "alpha", "legendary", "explorer"]),
   amountUsdm: z.number().min(0).max(20),
   nonce: z.string().min(4).max(128),
+  // Required for every paid pack: the on-chain orderId whose payment was
+  // already verified by recordPackPurchase. One purchase authorises exactly
+  // one reward payout (atomic claim in `claim_pack_purchase_for_reward`).
+  orderId: z.string().min(1).max(128).optional(),
 });
+
 
 export const distributeReward = createServerFn({ method: "POST" })
   .inputValidator((raw: unknown) => Input.parse(raw))
