@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Json } from "@/integrations/supabase/types";
+import { PACK_PRICE_USDM } from "@/lib/contracts";
 import { normalizeWallet, walletToProfileId } from "@/lib/profile";
 
 /* -------------------- Profile / username -------------------- */
