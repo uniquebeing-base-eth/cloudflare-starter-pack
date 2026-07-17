@@ -174,7 +174,7 @@ export async function findVerifiedPackPurchaseOnChain(params: {
   while (Date.now() - startedAt < timeoutMs) {
     try {
       const latest = await client.getBlockNumber();
-      const fromBlock = latest > 900n ? latest - 900n : 0n;
+      const fromBlock = latest > 7_200n ? latest - 7_200n : 0n;
       const logs = await client.getLogs({
         address: PAYMENT_CONTRACT as `0x${string}`,
         event: purchaseEvent,
@@ -236,7 +236,7 @@ export async function findRecentVerifiedPackPurchaseOnChain(params: {
 
   try {
     const latest = await client.getBlockNumber();
-    const fromBlock = latest > 1_800n ? latest - 1_800n : 0n;
+    const fromBlock = latest > 21_600n ? latest - 21_600n : 0n;
     const logs = await client.getLogs({
       address: PAYMENT_CONTRACT as `0x${string}`,
       event: purchaseEvent,
