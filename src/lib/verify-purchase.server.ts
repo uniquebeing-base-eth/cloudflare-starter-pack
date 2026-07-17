@@ -1,10 +1,10 @@
 // On-chain verification of a paid pack purchase.
 //
 // Prevents the "approve without pay" exploit: reads the Celo transaction
-// receipt for the given txHash and confirms that a USDM Transfer event
-// moved at least `priceUsdm` tokens from `wallet` into the ShredPayments
-// contract in the same transaction. Called from recordPackPurchase before
-// any purchase row (which later authorises a reward payout) is written.
+// receipt for the given txHash and confirms that buyWithToken() emitted the
+// ShredPayments PackPurchased event for this wallet, pack, token, amount and
+// orderId. Called from recordPackPurchase before any purchase row (which later
+// authorises a reward payout) is written.
 import { PACK_KEY, PAYMENT_ABI, PAYMENT_CONTRACT, USDM_ADDRESS } from "./contracts";
 import { getRuntimeEnv, resolveCeloRpcUrl } from "./reward-distribution";
 
@@ -167,14 +167,14 @@ export async function findVerifiedPackPurchaseOnChain(params: {
   const startedAt = Date.now();
   const timeoutMs = params.timeoutMs ?? 45_000;
   let lastReason = "purchase_event_not_found";
+  const purchaseEvent = parseAbiItem(
+    "event PackPurchased(address indexed buyer, uint8 indexed packKey, address indexed token, uint256 amount, bytes32 orderId)",
+  );
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
       const latest = await client.getBlockNumber();
-      const fromBlock = latest > 7_200n ? latest - 7_200n : 0n;
-      const purchaseEvent = parseAbiItem(
-        "event PackPurchased(address indexed buyer, uint8 indexed packKey, address indexed token, uint256 amount, bytes32 orderId)",
-      );
+      const fromBlock = latest > 900n ? latest - 900n : 0n;
       const logs = await client.getLogs({
         address: PAYMENT_CONTRACT as `0x${string}`,
         event: purchaseEvent,
