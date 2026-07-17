@@ -216,3 +216,59 @@ export async function findVerifiedPackPurchaseOnChain(params: {
 
   return { valid: false, reason: lastReason };
 }
+
+export async function findRecentVerifiedPackPurchaseOnChain(params: {
+  wallet: string;
+  packId: string;
+  priceUsdm: number;
+  excludeTxHashes?: string[];
+}): Promise<{ valid: true; txHash: string; orderId: string } | { valid: false; reason: string }> {
+  const { createPublicClient, http, parseAbiItem, parseUnits } = await import("viem");
+  const { celo } = await import("viem/chains");
+  const rpcUrl = resolveCeloRpcUrl(getRuntimeEnv());
+  const client = createPublicClient({ chain: celo, transport: http(rpcUrl) });
+  const minAmount = parseUnits(params.priceUsdm.toString(), 18);
+  const expectedPackKey = BigInt(PACK_KEY[params.packId] ?? -1);
+  const excluded = new Set((params.excludeTxHashes ?? []).map((h) => h.toLowerCase()));
+  const purchaseEvent = parseAbiItem(
+    "event PackPurchased(address indexed buyer, uint8 indexed packKey, address indexed token, uint256 amount, bytes32 orderId)",
+  );
+
+  try {
+    const latest = await client.getBlockNumber();
+    const fromBlock = latest > 1_800n ? latest - 1_800n : 0n;
+    const logs = await client.getLogs({
+      address: PAYMENT_CONTRACT as `0x${string}`,
+      event: purchaseEvent,
+      args: {
+        buyer: params.wallet as `0x${string}`,
+        packKey: Number(expectedPackKey),
+        token: USDM_ADDRESS as `0x${string}`,
+      },
+      fromBlock,
+      toBlock: latest,
+    });
+
+    for (const log of logs.reverse()) {
+      const txHash = log.transactionHash.toLowerCase();
+      if (excluded.has(txHash)) continue;
+      const args = log.args as { amount?: bigint; orderId?: string };
+      const amount = args.amount ?? 0n;
+      const orderId = String(args.orderId ?? "").toLowerCase();
+      if (!orderId || amount < minAmount) continue;
+
+      const verified = await verifyPackPurchaseOnChain({
+        wallet: params.wallet,
+        txHash: log.transactionHash,
+        packId: params.packId,
+        orderId,
+        priceUsdm: params.priceUsdm,
+      });
+      if (verified.valid) return { valid: true, txHash: log.transactionHash, orderId };
+    }
+
+    return { valid: false, reason: "recent_purchase_event_not_found" };
+  } catch (e) {
+    return { valid: false, reason: (e as Error)?.message?.slice(0, 120) || "recent_purchase_lookup_failed" };
+  }
+}

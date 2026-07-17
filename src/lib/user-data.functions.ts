@@ -282,9 +282,10 @@ export const findUnclaimedPackPurchase = createServerFn({ method: "GET" })
   }).parse(raw ?? {}))
   .handler(async ({ data }) => {
     const { getSupabasePublic } = await import("./supabase-public.server");
-    const { verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
+    const { findRecentVerifiedPackPurchaseOnChain, verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
     const supabasePublic = getSupabasePublic();
     const profileId = walletToProfileId(data.wallet);
+    const expectedPrice = Number(PACK_PRICE_USDM[data.packId] ?? 0);
     const { data: rows, error } = await supabasePublic
       .from("pack_purchases")
       .select("order_id, tx_hash, price_usdm, created_at")
@@ -309,6 +310,31 @@ export const findUnclaimedPackPurchase = createServerFn({ method: "GET" })
       if (ok.valid) {
         return { ok: true, orderId: row.order_id, txHash: row.tx_hash, createdAt: row.created_at };
       }
+    }
+
+    const { data: knownRows } = await supabasePublic
+      .from("pack_purchases")
+      .select("tx_hash")
+      .eq("user_id", profileId)
+      .eq("pack_id", data.packId)
+      .not("tx_hash", "is", null)
+      .limit(100);
+    const recovered = await findRecentVerifiedPackPurchaseOnChain({
+      wallet: data.wallet,
+      packId: data.packId,
+      priceUsdm: expectedPrice,
+      excludeTxHashes: (knownRows ?? []).map((row) => row.tx_hash).filter(Boolean) as string[],
+    });
+    if (recovered.valid) {
+      const { error: recordError } = await supabasePublic.rpc("record_wallet_pack_purchase", {
+        _wallet: data.wallet.toLowerCase(),
+        _pack_id: data.packId,
+        _order_id: recovered.orderId,
+        _tx_hash: recovered.txHash,
+        _price_usdm: expectedPrice,
+      });
+      if (recordError && !/duplicate key/i.test(recordError.message)) throw new Error(recordError.message);
+      return { ok: true, orderId: recovered.orderId, txHash: recovered.txHash, createdAt: null };
     }
 
     return { ok: false, orderId: null, txHash: null, createdAt: null };
