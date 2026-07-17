@@ -20,6 +20,7 @@ import {
   listMyDiscoveries,
   getStarterCooldown,
   recordPackPurchase,
+  findUnclaimedPackPurchase,
   getLeaderboard,
   getStatsAndFeed,
 } from "@/lib/user-data.functions";
@@ -445,7 +446,16 @@ const AVATAR_GRADIENTS = [
 ];
 
 /* -------------------- Purchase helper -------------------- */
-async function buyPackOnChain(packId: string, walletAddress: string, getEth: () => unknown) {
+function isTxHash(value: unknown): value is `0x${string}` {
+  return typeof value === "string" && /^0x[a-fA-F0-9]{64}$/.test(value);
+}
+
+async function buyPackOnChain(
+  packId: string,
+  walletAddress: string,
+  getEth: () => unknown,
+  onStatus?: (status: string) => void,
+) {
   const eth = getEth() as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } | null;
   if (!eth) throw new Error("No wallet");
   const { createWalletClient, createPublicClient, custom, http, parseUnits, keccak256, encodePacked } = await import("viem");
@@ -459,23 +469,50 @@ async function buyPackOnChain(packId: string, walletAddress: string, getEth: () 
   const price = parseUnits(PACK_PRICE_USDM[packId], 18);
   const orderId = keccak256(encodePacked(["address", "string", "uint256"], [walletAddress as `0x${string}`, packId, BigInt(Date.now())]));
   // Approve USDM then wait for confirmation
+  onStatus?.("Confirm approval in MiniPay");
   const approveTx = await client.writeContract({
     address: USDM_ADDRESS as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "approve",
     args: [PAYMENT_CONTRACT as `0x${string}`, price],
   });
-  await publicClient.waitForTransactionReceipt({ hash: approveTx });
+  if (isTxHash(approveTx)) {
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    if (receipt.status !== "success") throw new Error("Approval was not confirmed. Please try again.");
+  }
+  let approved = false;
+  for (let i = 0; i < 20; i += 1) {
+    const allowance = (await publicClient.readContract({
+      address: USDM_ADDRESS as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: "allowance",
+      args: [walletAddress as `0x${string}`, PAYMENT_CONTRACT as `0x${string}`],
+    })) as bigint;
+    if (allowance >= price) {
+      approved = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+  }
+  if (!approved) throw new Error("Approval is still pending. Please wait a moment and try again.");
   // Buy pack and wait for confirmation before returning
+  onStatus?.("Confirm pack purchase in MiniPay");
   const tx = await client.writeContract({
     address: PAYMENT_CONTRACT as `0x${string}`,
     abi: PAYMENT_ABI,
     functionName: "buyWithToken",
     args: [PACK_KEY[packId]!, USDM_ADDRESS as `0x${string}`, orderId],
   });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
-  if (receipt.status !== "success") throw new Error("Payment transaction reverted");
-  return { txHash: tx, orderId };
+  onStatus?.("Confirming payment…");
+  if (isTxHash(tx)) {
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+    if (receipt.status !== "success") throw new Error("Payment transaction reverted");
+    return { txHash: tx, orderId };
+  }
+  // Some MiniPay builds return a placeholder instead of a hash even though the
+  // transaction is submitted. The backend will locate and verify the matching
+  // PackPurchased event by orderId before unlocking the shred.
+  return { txHash: null, orderId };
 }
 
 /* -------------------- Username helper -------------------- */
@@ -515,6 +552,7 @@ function HomeScreen() {
   const [starterCooldownUntil, setStarterCooldownUntil] = useState<number | null>(null);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
+  const [purchaseStatus, setPurchaseStatus] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>(LIVE_EVENTS_SEED);
@@ -534,6 +572,7 @@ function HomeScreen() {
   const callListMyDiscoveries = useServerFn(listMyDiscoveries);
   const callGetStarterCooldown = useServerFn(getStarterCooldown);
   const callRecordPackPurchase = useServerFn(recordPackPurchase);
+  const callFindUnclaimedPackPurchase = useServerFn(findUnclaimedPackPurchase);
   const callGetLeaderboard = useServerFn(getLeaderboard);
   const callGetStatsAndFeed = useServerFn(getStatsAndFeed);
 
@@ -805,6 +844,19 @@ function HomeScreen() {
     }
     // If paid and not yet purchased, buy first
     if (pack.priceNum > 0 && !purchased.has(pack.id)) {
+      setBuying(true); setBuyError(null); setPurchaseStatus("Checking previous payment…");
+      try {
+        const pending = await callFindUnclaimedPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer" } });
+        if (pending?.ok && pending.orderId) {
+          pendingOrderIdRef.current = pending.orderId;
+          setPurchaseStatus("Payment confirmed. Opening pack…");
+          setBuying(false);
+          executeShred();
+          return;
+        }
+      } catch (e) {
+        console.warn("[purchase] previous payment lookup failed", e);
+      }
       if (wallet.chainId !== CELO_CHAIN_ID) {
         setBuyError("Switching to Celo network…");
         const acct = await wallet.connect();
@@ -814,24 +866,27 @@ function HomeScreen() {
         }
         setBuyError(null);
       }
-      setBuying(true); setBuyError(null);
+      setPurchaseStatus("Preparing payment…");
       try {
-        const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth);
+        const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth, setPurchaseStatus);
         // recordPackPurchase now verifies the txHash on-chain server-side;
         // if the wallet only sent an ERC20 approve() without the follow-up
         // transferFrom, the server rejects here and no reward can be claimed.
+        setPurchaseStatus("Verifying payment…");
         await callRecordPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer", orderId: purchase.orderId, txHash: purchase.txHash, priceUsdm: pack.priceNum } });
         pendingOrderIdRef.current = purchase.orderId;
+        setPurchaseStatus("Payment confirmed. Opening pack…");
         setBuying(false);
         executeShred();
       } catch (e: unknown) {
         setBuying(false);
+        setPurchaseStatus(null);
         setBuyError((e as Error)?.message?.slice(0, 80) || "Purchase failed.");
       }
       return;
     }
     executeShred();
-  }, [pack, purchased, wallet, starterCooldown, executeShred, callRecordPackPurchase]);
+  }, [pack, purchased, wallet, starterCooldown, executeShred, callRecordPackPurchase, callFindUnclaimedPackPurchase]);
 
   const startShred = useCallback(async () => {
     if (pack.id === "starter" && starterCooldown) {
@@ -940,6 +995,7 @@ function HomeScreen() {
           onShred={startShred}
           phase={phase}
           buying={buying}
+          purchaseStatus={purchaseStatus}
           needsPurchase={pack.priceNum > 0 && !purchased.has(pack.id)}
         />
 
@@ -981,6 +1037,11 @@ function HomeScreen() {
         {buyError && (
           <div className="mt-2 text-center text-[10px] text-destructive flex items-center justify-center gap-1">
             <AlertTriangle className="w-3 h-3" /> {buyError}
+          </div>
+        )}
+        {!buyError && buying && purchaseStatus && (
+          <div className="mt-2 text-center text-[10px] text-shred flex items-center justify-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> {purchaseStatus}
           </div>
         )}
 
@@ -1070,10 +1131,10 @@ function MiniStat({ Icon, value, label, tint }: { Icon: React.ComponentType<{ cl
 /* -------------------- Pack Carousel -------------------- */
 
 function PackCarousel({
-  index, onPrev, onNext, onShred, phase, buying, needsPurchase,
+  index, onPrev, onNext, onShred, phase, buying, purchaseStatus, needsPurchase,
 }: {
   index: number; onPrev: () => void; onNext: () => void; onShred: () => void;
-  phase: "idle" | "slashing" | "shredded" | "revealing"; buying: boolean; needsPurchase: boolean;
+  phase: "idle" | "slashing" | "shredded" | "revealing"; buying: boolean; purchaseStatus: string | null; needsPurchase: boolean;
 }) {
   const start = useRef<{ x: number; y: number; t: number } | null>(null);
   const [slash, setSlash] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
@@ -1160,7 +1221,10 @@ function PackCarousel({
           )}
           {buying && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="font-display text-xl text-white animate-pulse">Purchasing…</div>
+              <div className="flex flex-col items-center gap-2 text-center px-4">
+                <Loader2 className="w-7 h-7 text-shred animate-spin" />
+                <div className="font-display text-xl text-white animate-pulse">{purchaseStatus ?? "Purchasing…"}</div>
+              </div>
             </div>
           )}
           {needsPurchase && !buying && phase === "idle" && (
