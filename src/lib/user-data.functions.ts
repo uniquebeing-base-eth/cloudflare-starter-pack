@@ -228,35 +228,51 @@ export const recordPackPurchase = createServerFn({ method: "POST" })
     wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
     packId: z.enum(SHRED_PACKS),
     orderId: z.string().min(1).max(128),
-    txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+    txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional().nullable(),
     priceUsdm: z.number().positive(),
   }).parse(raw))
   .handler(async ({ data }) => {
     // CRITICAL: verify the on-chain payment before recording the purchase.
     // Without this check, a client can call recordPackPurchase with any
     // orderId / txHash / price and unlock a reward payout without paying.
-    const { verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
-    const ok = await verifyPackPurchaseOnChain({
+    const { findVerifiedPackPurchaseOnChain, verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
+    const verified = data.txHash
+      ? await verifyPackPurchaseOnChain({
+          wallet: data.wallet,
+          txHash: data.txHash,
+          packId: data.packId,
+          orderId: data.orderId,
+          priceUsdm: data.priceUsdm,
+        })
+      : await findVerifiedPackPurchaseOnChain({
+          wallet: data.wallet,
+          packId: data.packId,
+          orderId: data.orderId,
+          priceUsdm: data.priceUsdm,
+        });
+    const ok = verified.valid ? verified : await findVerifiedPackPurchaseOnChain({
       wallet: data.wallet,
-      txHash: data.txHash,
+      packId: data.packId,
+      orderId: data.orderId,
       priceUsdm: data.priceUsdm,
     });
     if (!ok.valid) {
-      console.error("[purchase] ✗ On-chain verification failed", { wallet: data.wallet, txHash: data.txHash, reason: ok.reason });
+      console.error("[purchase] ✗ On-chain verification failed", { wallet: data.wallet, txHash: data.txHash, orderId: data.orderId, reason: ok.reason });
       throw new Error(`Purchase verification failed: ${ok.reason}`);
     }
+    const txHash = ("txHash" in ok ? ok.txHash : data.txHash) as string;
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
     const { error } = await supabasePublic.rpc("record_wallet_pack_purchase", {
       _wallet: data.wallet.toLowerCase(),
       _pack_id: data.packId,
       _order_id: data.orderId,
-      _tx_hash: data.txHash,
+      _tx_hash: txHash,
       _price_usdm: data.priceUsdm,
     });
     if (error && !/duplicate key/i.test(error.message)) throw new Error(error.message);
-    console.info("[purchase] ✓ Verified and recorded", { wallet: data.wallet, packId: data.packId, orderId: data.orderId, txHash: data.txHash });
-    return { ok: true, orderId: data.orderId };
+    console.info("[purchase] ✓ Verified and recorded", { wallet: data.wallet, packId: data.packId, orderId: data.orderId, txHash });
+    return { ok: true, orderId: data.orderId, txHash };
   });
 
 
