@@ -275,6 +275,45 @@ export const recordPackPurchase = createServerFn({ method: "POST" })
     return { ok: true, orderId: data.orderId, txHash };
   });
 
+export const findUnclaimedPackPurchase = createServerFn({ method: "GET" })
+  .inputValidator((raw: unknown) => z.object({
+    wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    packId: z.enum(SHRED_PACKS),
+  }).parse(raw ?? {}))
+  .handler(async ({ data }) => {
+    const { getSupabasePublic } = await import("./supabase-public.server");
+    const { verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
+    const supabasePublic = getSupabasePublic();
+    const profileId = walletToProfileId(data.wallet);
+    const { data: rows, error } = await supabasePublic
+      .from("pack_purchases")
+      .select("order_id, tx_hash, price_usdm, created_at")
+      .eq("user_id", profileId)
+      .eq("pack_id", data.packId)
+      .eq("reward_paid", false)
+      .not("tx_hash", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(10);
+
+    if (error) throw new Error(error.message);
+
+    for (const row of rows ?? []) {
+      if (!row.tx_hash) continue;
+      const ok = await verifyPackPurchaseOnChain({
+        wallet: data.wallet,
+        txHash: row.tx_hash,
+        packId: data.packId,
+        orderId: row.order_id,
+        priceUsdm: Number(row.price_usdm ?? 0),
+      });
+      if (ok.valid) {
+        return { ok: true, orderId: row.order_id, txHash: row.tx_hash, createdAt: row.created_at };
+      }
+    }
+
+    return { ok: false, orderId: null, txHash: null, createdAt: null };
+  });
+
 
 /* -------------------- Leaderboard -------------------- */
 

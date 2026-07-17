@@ -20,6 +20,7 @@ import {
   listMyDiscoveries,
   getStarterCooldown,
   recordPackPurchase,
+  findUnclaimedPackPurchase,
   getLeaderboard,
   getStatsAndFeed,
 } from "@/lib/user-data.functions";
@@ -571,6 +572,7 @@ function HomeScreen() {
   const callListMyDiscoveries = useServerFn(listMyDiscoveries);
   const callGetStarterCooldown = useServerFn(getStarterCooldown);
   const callRecordPackPurchase = useServerFn(recordPackPurchase);
+  const callFindUnclaimedPackPurchase = useServerFn(findUnclaimedPackPurchase);
   const callGetLeaderboard = useServerFn(getLeaderboard);
   const callGetStatsAndFeed = useServerFn(getStatsAndFeed);
 
@@ -842,6 +844,19 @@ function HomeScreen() {
     }
     // If paid and not yet purchased, buy first
     if (pack.priceNum > 0 && !purchased.has(pack.id)) {
+      setBuying(true); setBuyError(null); setPurchaseStatus("Checking previous payment…");
+      try {
+        const pending = await callFindUnclaimedPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer" } });
+        if (pending?.ok && pending.orderId) {
+          pendingOrderIdRef.current = pending.orderId;
+          setPurchaseStatus("Payment confirmed. Opening pack…");
+          setBuying(false);
+          executeShred();
+          return;
+        }
+      } catch (e) {
+        console.warn("[purchase] previous payment lookup failed", e);
+      }
       if (wallet.chainId !== CELO_CHAIN_ID) {
         setBuyError("Switching to Celo network…");
         const acct = await wallet.connect();
@@ -851,7 +866,7 @@ function HomeScreen() {
         }
         setBuyError(null);
       }
-      setBuying(true); setBuyError(null); setPurchaseStatus("Preparing payment…");
+      setPurchaseStatus("Preparing payment…");
       try {
         const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth, setPurchaseStatus);
         // recordPackPurchase now verifies the txHash on-chain server-side;
@@ -871,7 +886,7 @@ function HomeScreen() {
       return;
     }
     executeShred();
-  }, [pack, purchased, wallet, starterCooldown, executeShred, callRecordPackPurchase]);
+  }, [pack, purchased, wallet, starterCooldown, executeShred, callRecordPackPurchase, callFindUnclaimedPackPurchase]);
 
   const startShred = useCallback(async () => {
     if (pack.id === "starter" && starterCooldown) {
