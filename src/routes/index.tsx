@@ -504,15 +504,12 @@ async function buyPackOnChain(
     args: [PACK_KEY[packId]!, USDM_ADDRESS as `0x${string}`, orderId],
   });
   onStatus?.("Confirming payment…");
-  if (isTxHash(tx)) {
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
-    if (receipt.status !== "success") throw new Error("Payment transaction reverted");
-    return { txHash: tx, orderId };
+  if (!isTxHash(tx)) {
+    throw new Error("The wallet did not return a transaction hash. Please try again.");
   }
-  // Some MiniPay builds return a placeholder instead of a hash even though the
-  // transaction is submitted. The backend will locate and verify the matching
-  // PackPurchased event by orderId before unlocking the shred.
-  return { txHash: null, orderId };
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+  if (receipt.status !== "success") throw new Error("Payment transaction reverted");
+  return { txHash: tx, orderId };
 }
 
 /* -------------------- Username helper -------------------- */
@@ -844,18 +841,23 @@ function HomeScreen() {
     }
     // If paid and not yet purchased, buy first
     if (pack.priceNum > 0 && !purchased.has(pack.id)) {
-      setBuying(true); setBuyError(null); setPurchaseStatus("Checking previous payment…");
+      setBuying(true); setBuyError(null); setPurchaseStatus("Checking for a confirmed purchase…");
       try {
         const pending = await callFindUnclaimedPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer" } });
         if (pending?.ok && pending.orderId) {
           pendingOrderIdRef.current = pending.orderId;
+          setPurchased((prev) => {
+            const next = new Set(prev);
+            next.add(pack.id);
+            return next;
+          });
           setPurchaseStatus("Payment confirmed. Opening pack…");
           setBuying(false);
           executeShred();
           return;
         }
       } catch (e) {
-        console.warn("[purchase] previous payment lookup failed", e);
+        console.warn("[purchase] previous purchase lookup failed", e);
       }
       if (wallet.chainId !== CELO_CHAIN_ID) {
         setBuyError("Switching to Celo network…");
@@ -869,12 +871,14 @@ function HomeScreen() {
       setPurchaseStatus("Preparing payment…");
       try {
         const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth, setPurchaseStatus);
-        // recordPackPurchase now verifies the txHash on-chain server-side;
-        // if the wallet only sent an ERC20 approve() without the follow-up
-        // transferFrom, the server rejects here and no reward can be claimed.
-        setPurchaseStatus("Verifying payment…");
+        setPurchaseStatus("Recording purchase…");
         await callRecordPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer", orderId: purchase.orderId, txHash: purchase.txHash, priceUsdm: pack.priceNum } });
         pendingOrderIdRef.current = purchase.orderId;
+        setPurchased((prev) => {
+          const next = new Set(prev);
+          next.add(pack.id);
+          return next;
+        });
         setPurchaseStatus("Payment confirmed. Opening pack…");
         setBuying(false);
         executeShred();

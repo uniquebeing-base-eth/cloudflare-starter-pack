@@ -233,35 +233,27 @@ export const recordPackPurchase = createServerFn({ method: "POST" })
     priceUsdm: z.number().positive(),
   }).parse(raw))
   .handler(async ({ data }) => {
-    // CRITICAL: verify the on-chain payment before recording the purchase.
-    // Without this check, a client can call recordPackPurchase with any
-    // orderId / txHash / price and unlock a reward payout without paying.
-    const { findVerifiedPackPurchaseOnChain, verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
-    const verified = data.txHash
-      ? await verifyPackPurchaseOnChain({
-          wallet: data.wallet,
-          txHash: data.txHash,
-          packId: data.packId,
-          orderId: data.orderId,
-          priceUsdm: data.priceUsdm,
-        })
-      : await findVerifiedPackPurchaseOnChain({
-          wallet: data.wallet,
-          packId: data.packId,
-          orderId: data.orderId,
-          priceUsdm: data.priceUsdm,
-        });
-    const ok = verified.valid ? verified : await findVerifiedPackPurchaseOnChain({
+    if (!data.txHash) {
+      throw new Error("Purchase verification requires a transaction hash.");
+    }
+
+    // CRITICAL: verify the submitted payment transaction receipt before
+    // recording the purchase. This keeps the flow fast and secure because we
+    // only inspect the exact tx that the user just submitted and require the
+    // PackPurchased event to be present.
+    const { verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
+    const verified = await verifyPackPurchaseOnChain({
       wallet: data.wallet,
+      txHash: data.txHash,
       packId: data.packId,
       orderId: data.orderId,
       priceUsdm: data.priceUsdm,
     });
-    if (!ok.valid) {
-      console.error("[purchase] ✗ On-chain verification failed", { wallet: data.wallet, txHash: data.txHash, orderId: data.orderId, reason: ok.reason });
-      throw new Error(`Purchase verification failed: ${ok.reason}`);
+    if (!verified.valid) {
+      console.error("[purchase] ✗ On-chain verification failed", { wallet: data.wallet, txHash: data.txHash, orderId: data.orderId, reason: verified.reason });
+      throw new Error(`Purchase verification failed: ${verified.reason}`);
     }
-    const txHash = ("txHash" in ok ? ok.txHash : data.txHash) as string;
+    const txHash = data.txHash;
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
     const { error } = await supabasePublic.rpc("record_wallet_pack_purchase", {
@@ -283,10 +275,9 @@ export const findUnclaimedPackPurchase = createServerFn({ method: "GET" })
   }).parse(raw ?? {}))
   .handler(async ({ data }) => {
     const { getSupabasePublic } = await import("./supabase-public.server");
-    const { findRecentVerifiedPackPurchaseOnChain, verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
+    const { verifyPackPurchaseOnChain } = await import("./verify-purchase.server");
     const supabasePublic = getSupabasePublic();
     const profileId = walletToProfileId(data.wallet);
-    const expectedPrice = Number(PACK_PRICE_USDM[data.packId] ?? 0);
     const { data: rows, error } = await supabasePublic
       .from("pack_purchases")
       .select("order_id, tx_hash, price_usdm, created_at")
@@ -311,31 +302,6 @@ export const findUnclaimedPackPurchase = createServerFn({ method: "GET" })
       if (ok.valid) {
         return { ok: true, orderId: row.order_id, txHash: row.tx_hash, createdAt: row.created_at };
       }
-    }
-
-    const { data: knownRows } = await supabasePublic
-      .from("pack_purchases")
-      .select("tx_hash")
-      .eq("user_id", profileId)
-      .eq("pack_id", data.packId)
-      .not("tx_hash", "is", null)
-      .limit(100);
-    const recovered = await findRecentVerifiedPackPurchaseOnChain({
-      wallet: data.wallet,
-      packId: data.packId,
-      priceUsdm: expectedPrice,
-      excludeTxHashes: (knownRows ?? []).map((row) => row.tx_hash).filter(Boolean) as string[],
-    });
-    if (recovered.valid) {
-      const { error: recordError } = await supabasePublic.rpc("record_wallet_pack_purchase", {
-        _wallet: data.wallet.toLowerCase(),
-        _pack_id: data.packId,
-        _order_id: recovered.orderId,
-        _tx_hash: recovered.txHash,
-        _price_usdm: expectedPrice,
-      });
-      if (recordError && !/duplicate key/i.test(recordError.message)) throw new Error(recordError.message);
-      return { ok: true, orderId: recovered.orderId, txHash: recovered.txHash, createdAt: null };
     }
 
     return { ok: false, orderId: null, txHash: null, createdAt: null };
