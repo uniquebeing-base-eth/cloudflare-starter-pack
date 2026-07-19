@@ -794,23 +794,29 @@ function HomeScreen() {
           const usdmItem = items.find((i) => i.kind === "USDM");
           const usdmAmount = typeof usdmItem?.amountRaw === "number" ? usdmItem.amountRaw : 0;
           const isPaidPack = pack.priceNum > 0;
-            const orderId = pendingOrderRef.current?.orderId;
-          if (isPaidPack) {
-            if (!orderId) {
-              throw new Error("Paid packs must have a verified orderId before opening.");
-            }
-            pendingOrderRef.current = null;
+          const orderId = pendingOrderRef.current?.orderId;
+
+          if (usdmAmount > 0) {
             const nonce = `${wallet.address.toLowerCase()}-${pack.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-            console.info("[reward] ✓ Claiming paid pack purchase", { packId: pack.id, amountUsdm: usdmAmount, orderId });
-            const result = await callDistribute({
-              data: {
-                wallet: wallet.address,
-                packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer",
-                amountUsdm: usdmAmount,
-                nonce,
-                orderId,
-              },
-            });
+            const rewardData = {
+              wallet: wallet.address,
+              packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer",
+              amountUsdm: usdmAmount,
+              nonce,
+              ...(isPaidPack && orderId ? { orderId } : {}),
+            };
+
+            if (isPaidPack) {
+              if (!orderId) {
+                throw new Error("Paid packs must have a verified orderId before opening.");
+              }
+              pendingOrderRef.current = null;
+              console.info("[reward] ✓ Claiming paid pack purchase", { packId: pack.id, amountUsdm: usdmAmount, orderId });
+            } else {
+              console.info("[reward] ✓ Sending starter reward", { packId: pack.id, amountUsdm: usdmAmount });
+            }
+
+            const result = await callDistribute({ data: rewardData });
             if (!result.ok) {
               console.error("[reward] distributeReward failed", result);
               setBuyError(result.error === "treasury_underfunded"
