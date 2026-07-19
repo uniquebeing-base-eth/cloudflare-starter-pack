@@ -540,7 +540,6 @@ function HomeScreen() {
   const [showProfile, setShowProfile] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [purchased, setPurchased] = useState<Set<string>>(new Set(["starter"]));
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
   const [leaderboardRange, setLeaderboardRange] = useState<"daily" | "weekly" | "monthly" | "all">("weekly");
@@ -839,18 +838,13 @@ function HomeScreen() {
         return;
       }
     }
-    // If paid and not yet purchased, buy first
-    if (pack.priceNum > 0 && !purchased.has(pack.id)) {
+    // If paid, require a fresh purchase every time before opening.
+    if (pack.priceNum > 0) {
       setBuying(true); setBuyError(null); setPurchaseStatus("Checking for a confirmed purchase…");
       try {
         const pending = await callFindUnclaimedPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer" } });
         if (pending?.ok && pending.orderId) {
           pendingOrderIdRef.current = pending.orderId;
-          setPurchased((prev) => {
-            const next = new Set(prev);
-            next.add(pack.id);
-            return next;
-          });
           setPurchaseStatus("Payment confirmed. Opening pack…");
           setBuying(false);
           executeShred();
@@ -874,11 +868,6 @@ function HomeScreen() {
         setPurchaseStatus("Recording purchase…");
         await callRecordPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer", orderId: purchase.orderId, txHash: purchase.txHash, priceUsdm: pack.priceNum } });
         pendingOrderIdRef.current = purchase.orderId;
-        setPurchased((prev) => {
-          const next = new Set(prev);
-          next.add(pack.id);
-          return next;
-        });
         setPurchaseStatus("Payment confirmed. Opening pack…");
         setBuying(false);
         executeShred();
@@ -890,7 +879,7 @@ function HomeScreen() {
       return;
     }
     executeShred();
-  }, [pack, purchased, wallet, starterCooldown, executeShred, callRecordPackPurchase, callFindUnclaimedPackPurchase]);
+  }, [pack, wallet, starterCooldown, executeShred, callRecordPackPurchase, callFindUnclaimedPackPurchase]);
 
   const startShred = useCallback(async () => {
     if (pack.id === "starter" && starterCooldown) {
@@ -1000,7 +989,7 @@ function HomeScreen() {
           phase={phase}
           buying={buying}
           purchaseStatus={purchaseStatus}
-          needsPurchase={pack.priceNum > 0 && !purchased.has(pack.id)}
+          needsPurchase={pack.priceNum > 0}
         />
 
         {/* Pack details — live per-pack counters */}
