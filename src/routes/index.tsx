@@ -556,9 +556,9 @@ function HomeScreen() {
   const [globalStats, setGlobalStats] = useState<{ shredders: number; packs_shredded: number; discoveries: number; rewards_usdm: number }>({ shredders: 0, packs_shredded: 0, discoveries: 0, rewards_usdm: 0 });
   const [avatarByWallet, setAvatarByWallet] = useState<Record<string, string>>({});
   // Holds the on-chain orderId of the most-recently-verified paid purchase.
-  // Consumed by executeShred so distributeReward can claim it atomically —
-  // one verified purchase = one reward. Cleared after the payout attempt.
-  const pendingOrderIdRef = useRef<string | null>(null);
+  // The current pack must match the pending payment so you cannot pay once
+  // and open another paid pack for free.
+  const pendingOrderRef = useRef<{ packId: Pack["id"]; orderId: string } | null>(null);
   const wallet = useWallet();
   const callDistribute = useServerFn(distributeReward);
   
@@ -753,7 +753,7 @@ function HomeScreen() {
       setBuyError("The free Starter Pack is on a 12-hour cooldown. Come back later for another free shred.");
       return;
     }
-    if (pack.priceNum > 0 && !pendingOrderIdRef.current) {
+    if (pack.priceNum > 0 && pendingOrderRef.current?.packId !== pack.id) {
       setBuyError("Please complete payment before opening this paid pack.");
       return;
     }
@@ -794,12 +794,12 @@ function HomeScreen() {
           const usdmItem = items.find((i) => i.kind === "USDM");
           const usdmAmount = typeof usdmItem?.amountRaw === "number" ? usdmItem.amountRaw : 0;
           const isPaidPack = pack.priceNum > 0;
-          const orderId = pendingOrderIdRef.current ?? undefined;
+            const orderId = pendingOrderRef.current?.orderId;
           if (isPaidPack) {
-            pendingOrderIdRef.current = null;
             if (!orderId) {
               throw new Error("Paid packs must have a verified orderId before opening.");
             }
+            pendingOrderRef.current = null;
             const nonce = `${wallet.address.toLowerCase()}-${pack.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
             console.info("[reward] ✓ Claiming paid pack purchase", { packId: pack.id, amountUsdm: usdmAmount, orderId });
             const result = await callDistribute({
@@ -849,34 +849,34 @@ function HomeScreen() {
     }
     // If paid, require a fresh purchase every time before opening.
     if (pack.priceNum > 0) {
-      setBuying(true); setBuyError(null); setPurchaseStatus("Checking for a confirmed purchase…");
-      try {
-        const pending = await callFindUnclaimedPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer" } });
-        if (pending?.ok && pending.orderId) {
-          pendingOrderIdRef.current = pending.orderId;
-          setPurchaseStatus("Payment confirmed. Opening pack…");
-          setBuying(false);
-          executeShred();
-          return;
-        }
-      } catch (e) {
-        console.warn("[purchase] previous purchase lookup failed", e);
-      }
+      setBuying(true);
+      setBuyError(null);
+      setPurchaseStatus("Preparing payment…");
+
       if (wallet.chainId !== CELO_CHAIN_ID) {
         setBuyError("Switching to Celo network…");
         const acct = await wallet.connect();
         if (!acct || wallet.chainId !== CELO_CHAIN_ID) {
           setBuyError("Please switch your wallet to the Celo network to continue.");
+          setBuying(false);
           return;
         }
         setBuyError(null);
       }
-      setPurchaseStatus("Preparing payment…");
+
       try {
         const purchase = await buyPackOnChain(pack.id, wallet.address!, wallet.getEth, setPurchaseStatus);
         setPurchaseStatus("Recording purchase…");
-        await callRecordPackPurchase({ data: { wallet: wallet.address!, packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer", orderId: purchase.orderId, txHash: purchase.txHash, priceUsdm: pack.priceNum } });
-        pendingOrderIdRef.current = purchase.orderId;
+        await callRecordPackPurchase({
+          data: {
+            wallet: wallet.address!,
+            packId: pack.id as "starter" | "mystery" | "alpha" | "legendary" | "explorer",
+            orderId: purchase.orderId,
+            txHash: purchase.txHash,
+            priceUsdm: pack.priceNum,
+          },
+        });
+        pendingOrderRef.current = { packId: pack.id, orderId: purchase.orderId };
         setPurchaseStatus("Payment confirmed. Opening pack…");
         setBuying(false);
         executeShred();
@@ -887,8 +887,9 @@ function HomeScreen() {
       }
       return;
     }
+
     executeShred();
-  }, [pack, wallet, starterCooldown, executeShred, callRecordPackPurchase, callFindUnclaimedPackPurchase]);
+  }, [pack, wallet, starterCooldown, executeShred, callRecordPackPurchase]);
 
   const startShred = useCallback(async () => {
     if (pack.id === "starter" && starterCooldown) {
