@@ -753,6 +753,11 @@ function HomeScreen() {
       setBuyError("The free Starter Pack is on a 12-hour cooldown. Come back later for another free shred.");
       return;
     }
+    if (pack.priceNum > 0 && !pendingOrderIdRef.current) {
+      setBuyError("Please complete payment before opening this paid pack.");
+      return;
+    }
+
     const items = buildDiscoveries(pack.id);
     setReveals(items);
     audio.duckTheme();
@@ -788,11 +793,15 @@ function HomeScreen() {
           // the shred is saved, so failed/duplicate saves cannot trigger payout.
           const usdmItem = items.find((i) => i.kind === "USDM");
           const usdmAmount = typeof usdmItem?.amountRaw === "number" ? usdmItem.amountRaw : 0;
-          if (usdmItem && usdmAmount > 0) {
-            const nonce = `${wallet.address.toLowerCase()}-${pack.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-            const orderId = pendingOrderIdRef.current ?? undefined;
+          const isPaidPack = pack.priceNum > 0;
+          const orderId = pendingOrderIdRef.current ?? undefined;
+          if (isPaidPack) {
             pendingOrderIdRef.current = null;
-            console.info("[reward] ✓ Sending payout", { packId: pack.id, amountUsdm: usdmAmount, orderId });
+            if (!orderId) {
+              throw new Error("Paid packs must have a verified orderId before opening.");
+            }
+            const nonce = `${wallet.address.toLowerCase()}-${pack.id}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+            console.info("[reward] ✓ Claiming paid pack purchase", { packId: pack.id, amountUsdm: usdmAmount, orderId });
             const result = await callDistribute({
               data: {
                 wallet: wallet.address,
