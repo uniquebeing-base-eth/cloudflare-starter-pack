@@ -1806,30 +1806,44 @@ function OnboardingOverlay({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-background flex items-center justify-center">
+    <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center px-4 py-6">
       <div
-        className="relative w-full h-full max-w-md mx-auto flex flex-col select-none touch-none"
+        className="relative w-full max-w-[min(92vw,640px)] max-h-[92vh] mx-auto flex flex-col select-none touch-none rounded-2xl overflow-hidden"
         onPointerDown={onDown}
         onPointerUp={onUp}
+        role="dialog"
+        aria-modal="true"
       >
-        <img
-          src={ONBOARDING_SLIDES[step]}
-          alt={`Onboarding ${step + 1}`}
-          className="absolute inset-0 w-full h-full object-contain"
-          draggable={false}
-        />
-        <div className="mt-auto pb-6 pt-4 px-5 z-10 relative flex gap-2 bg-gradient-to-t from-background via-background/85 to-transparent">
-          <button
-            onClick={onDone}
-            className="flex-1 py-3 rounded-2xl text-xs font-bold tracking-widest stat-card text-muted-foreground active:scale-[0.98]"
-          >SKIP</button>
-          <button
-            onClick={() => last ? onDone() : setStep(step + 1)}
-            className="flex-[2] py-3 rounded-2xl text-xs font-bold tracking-widest bg-shred text-primary-foreground glow-shred flex items-center justify-center gap-2 active:scale-[0.98]"
-          >
-            {last ? "LET'S SHRED" : "NEXT"}
-            <ArrowRight className="w-4 h-4" />
-          </button>
+        <div className="w-full h-full flex flex-col bg-card">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4">
+            <img
+              src={ONBOARDING_SLIDES[step]}
+              alt={`Onboarding ${step + 1}`}
+              draggable={false}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              className="block"
+            />
+          </div>
+
+          <div className="w-full px-4 py-3 border-t border-border bg-gradient-to-t from-background/60 to-transparent">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[12px] text-muted-foreground">{step + 1} / {ONBOARDING_SLIDES.length}</div>
+              <div className="flex items-center gap-2 w-full">
+                <button
+                  onClick={onDone}
+                  className="py-2 px-3 rounded-2xl text-[13px] font-bold tracking-widest stat-card text-muted-foreground"
+                >SKIP</button>
+                <div className="flex-1" />
+                <button
+                  onClick={() => last ? onDone() : setStep(step + 1)}
+                  className="py-2 px-3 rounded-2xl text-[13px] font-bold tracking-widest bg-shred text-primary-foreground glow-shred flex items-center justify-center gap-2"
+                >
+                  <span className="text-sm">{last ? "LET'S SHRED" : "NEXT"}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
