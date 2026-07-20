@@ -678,9 +678,17 @@ function HomeScreen() {
     Object.keys(window.localStorage)
       .filter((key) => key.startsWith("shreds_starter_cd"))
       .forEach((key) => window.localStorage.removeItem(key));
-    if (!localStorage.getItem("shreds_onboarded")) setShowOnboarding(true);
-    const hasSeenAnnouncement = localStorage.getItem("shreds_announcement_seen");
-    if (!hasSeenAnnouncement) setShowAnnouncement(true);
+
+    const hasCompletedOnboarding = Boolean(localStorage.getItem("shreds_onboarded"));
+    if (!hasCompletedOnboarding) {
+      setShowOnboarding(true);
+      setShowAnnouncement(false);
+    } else {
+      const hasSeenAnnouncement = localStorage.getItem("shreds_announcement_seen");
+      if (!hasSeenAnnouncement) {
+        setShowAnnouncement(true);
+      }
+    }
     setHydrated(true);
     // Warm image cache so packs & discoveries render instantly on first shred.
     const warm = [
@@ -760,6 +768,10 @@ function HomeScreen() {
   const finishOnboarding = () => {
     try { localStorage.setItem("shreds_onboarded", "1"); } catch { /* noop */ }
     setShowOnboarding(false);
+    const hasSeenAnnouncement = localStorage.getItem("shreds_announcement_seen");
+    if (!hasSeenAnnouncement) {
+      setShowAnnouncement(true);
+    }
   };
 
   const dismissAnnouncement = () => {
@@ -1143,7 +1155,9 @@ function HomeScreen() {
           }}
         />
       )}
-      {showAnnouncement && <AnnouncementOverlay onClose={dismissAnnouncement} />}
+      {!hydrated ? null : showAnnouncement && !showOnboarding && !showHelp ? (
+        <AnnouncementOverlay onClose={dismissAnnouncement} />
+      ) : null}
       {showOnboarding && <OnboardingOverlay onDone={finishOnboarding} />}
       {showHelp && <HelpSheet onClose={() => setShowHelp(false)} onReplay={replayOnboarding} />}
       {showUsernameModal && (
