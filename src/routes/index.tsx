@@ -1449,6 +1449,7 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
     Monthly: "monthly",
     "All Time": "all",
   };
+  const currentUser = leaderboard[0] ? null : null;
 
   return (
     <Sheet title="Leaderboard" onClose={onClose} Icon={Trophy}>
@@ -1465,6 +1466,30 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
         <EmptyState text="No rankings yet. Be the first to shred and claim the top spot." />
       ) : (
         <div className="space-y-2">
+          <div className="rounded-2xl border border-shred/25 bg-gradient-to-r from-shred/12 to-background p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] font-black uppercase tracking-[0.24em] text-shred">Your position</div>
+              <div className="text-[10px] text-muted-foreground">{range === "all" ? "All time" : range.charAt(0).toUpperCase() + range.slice(1)}</div>
+            </div>
+            {leaderboard.slice(0, 3).map((row, index) => (
+              <div key={`${row.wallet ?? row.username ?? index}`} className="flex items-center gap-2 rounded-xl bg-background/70 px-2.5 py-2">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{index + 1}</div>
+                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }}>
+                  {row.avatar_url ? (
+                    <img src={row.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-white">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{row.username ? `@${row.username}` : shortAddr(row.wallet)}</div>
+                  <div className="text-[10px] text-muted-foreground">{row.packs_shredded} packs · {row.xp} XP</div>
+                </div>
+              </div>
+            ))}
+          </div>
           {leaderboard.map((row, index) => (
             <div key={`${row.wallet ?? row.username ?? index}`} className="stat-card rounded-xl px-2.5 py-2 flex items-center gap-2">
               <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{index + 1}</div>
