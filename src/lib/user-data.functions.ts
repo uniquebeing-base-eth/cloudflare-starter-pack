@@ -50,12 +50,34 @@ export const upsertProfile = createServerFn({ method: "POST" })
 export const getMyProfile = createServerFn({ method: "GET" })
   .inputValidator((raw: unknown) => z.object({ wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/) }).parse(raw ?? {}))
   .handler(async ({ data }) => {
+    const normalizedWallet = data.wallet.toLowerCase();
     const { getSupabasePublic } = await import("./supabase-public.server");
+    const { resolveOnchainUsername } = await import("./onchain-username.server");
     const supabasePublic = getSupabasePublic();
     const profileId = walletToProfileId(data.wallet);
+
     const { data: row, error } = await supabasePublic
       .from("profiles").select("*").eq("id", profileId).maybeSingle();
     if (error) throw new Error(error.message);
+
+    if (!row || !row.username || row.username.trim().length === 0) {
+      const resolved = await resolveOnchainUsername(normalizedWallet);
+      if (resolved) {
+        const { error: upsertError } = await supabasePublic.rpc("upsert_wallet_profile", {
+          _wallet: normalizedWallet,
+          _username: resolved,
+        });
+        if (upsertError) {
+          console.warn("[profile] failed to backfill on-chain username", { wallet: normalizedWallet, error: upsertError.message });
+        } else {
+          const { data: updatedRow, error: updatedError } = await supabasePublic
+            .from("profiles").select("*").eq("id", profileId).maybeSingle();
+          if (updatedError) throw new Error(updatedError.message);
+          return updatedRow ?? row;
+        }
+      }
+    }
+
     return row;
   });
 

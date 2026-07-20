@@ -513,11 +513,16 @@ async function buyPackOnChain(
 }
 
 /* -------------------- Username helper -------------------- */
+function getRpcUrl(): string {
+  const env = import.meta.env as Record<string, unknown>;
+  return (env.VITE_CELO_RPC_URL as string) || "https://forno.celo.org";
+}
+
 async function fetchUsernameOnChain(walletAddress: string): Promise<string | null> {
   try {
     const { createPublicClient, http } = await import("viem");
     const { celo } = await import("viem/chains");
-    const publicClient = createPublicClient({ chain: celo, transport: http() });
+    const publicClient = createPublicClient({ chain: celo, transport: http(getRpcUrl()) });
     const name = (await publicClient.readContract({
       address: USERNAME_CONTRACT as `0x${string}`,
       abi: USERNAME_ABI,
@@ -525,7 +530,10 @@ async function fetchUsernameOnChain(walletAddress: string): Promise<string | nul
       args: [walletAddress as `0x${string}`],
     })) as string;
     return name && name.length > 0 ? name : null;
-  } catch { return null; }
+  } catch (error) {
+    console.warn("[username] on-chain fetch failed", { walletAddress, error });
+    return null;
+  }
 }
 
 /* -------------------- Home Screen -------------------- */
@@ -664,17 +672,27 @@ function HomeScreen() {
   useEffect(() => {
     if (!wallet.address) return;
     let cancelled = false;
-    void fetchUsernameOnChain(wallet.address).then((name) => {
-      if (cancelled || !name) return;
-      setUsername(name);
-      if (wallet.address) {
-        void callUpsertProfile({ data: { wallet: wallet.address, username: name } }).catch(() => { /* non-fatal */ });
+    const syncWalletProfile = async () => {
+      const normalizedWallet = wallet.address.toLowerCase();
+      const onchainName = await fetchUsernameOnChain(normalizedWallet);
+      if (cancelled) return;
+
+      try {
+        if (onchainName) {
+          setUsername(onchainName);
+          await callUpsertProfile({ data: { wallet: wallet.address, username: onchainName } });
+        } else {
+          await callUpsertProfile({ data: { wallet: wallet.address } });
+        }
+      } catch (error) {
+        console.warn("[profile] wallet sync failed", { wallet: normalizedWallet, error });
       }
-    });
-    if (wallet.address) {
-      void callUpsertProfile({ data: { wallet: wallet.address } }).catch(() => { /* non-fatal */ });
-    }
-    void refreshProfileAndLeaderboard();
+
+      if (cancelled) return;
+      await refreshProfileAndLeaderboard();
+    };
+
+    void syncWalletProfile();
     return () => { cancelled = true; };
   }, [wallet.address, refreshProfileAndLeaderboard, callUpsertProfile]);
 
