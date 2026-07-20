@@ -701,19 +701,20 @@ function HomeScreen() {
 
   // Auto-detect existing on-chain username whenever wallet connects
   useEffect(() => {
-    if (!wallet.address) return;
+    const walletAddress = wallet.address;
+    if (!walletAddress) return;
     let cancelled = false;
     const syncWalletProfile = async () => {
-      const normalizedWallet = wallet.address.toLowerCase();
+      const normalizedWallet = walletAddress.toLowerCase();
       const onchainName = await fetchUsernameOnChain(normalizedWallet);
       if (cancelled) return;
 
       try {
         if (onchainName) {
           setUsername(onchainName);
-          await callUpsertProfile({ data: { wallet: wallet.address, username: onchainName } });
+          await callUpsertProfile({ data: { wallet: walletAddress, username: onchainName } });
         } else {
-          await callUpsertProfile({ data: { wallet: wallet.address } });
+          await callUpsertProfile({ data: { wallet: walletAddress } });
         }
       } catch (error) {
         console.warn("[profile] wallet sync failed", { wallet: normalizedWallet, error });
@@ -1449,7 +1450,15 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
     Monthly: "monthly",
     "All Time": "all",
   };
-  const currentUser = leaderboard[0] ? null : null;
+
+  const currentWallet = typeof window !== "undefined" ? window.localStorage.getItem("shreds_last_wallet") : null;
+  const currentUserIndex = leaderboard.findIndex((row) => {
+    const rowWallet = row.wallet?.toLowerCase();
+    const targetWallet = currentWallet?.toLowerCase();
+    return Boolean(targetWallet && rowWallet && rowWallet === targetWallet);
+  });
+  const currentUser = currentUserIndex >= 0 ? leaderboard[currentUserIndex] : null;
+  const currentUserRank = currentUser ? currentUserIndex + 1 : null;
 
   return (
     <Sheet title="Leaderboard" onClose={onClose} Icon={Trophy}>
@@ -1471,12 +1480,12 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
               <div className="text-[10px] font-black uppercase tracking-[0.24em] text-shred">Your position</div>
               <div className="text-[10px] text-muted-foreground">{range === "all" ? "All time" : range.charAt(0).toUpperCase() + range.slice(1)}</div>
             </div>
-            {leaderboard.slice(0, 3).map((row, index) => (
-              <div key={`${row.wallet ?? row.username ?? index}`} className="flex items-center gap-2 rounded-xl bg-background/70 px-2.5 py-2">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{index + 1}</div>
-                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: AVATAR_GRADIENTS[index % AVATAR_GRADIENTS.length] }}>
-                  {row.avatar_url ? (
-                    <img src={row.avatar_url} alt="" className="w-full h-full object-cover" />
+            {currentUser && currentUserRank ? (
+              <div className="flex items-center gap-2 rounded-xl bg-background/70 px-2.5 py-2">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{currentUserRank}</div>
+                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: AVATAR_GRADIENTS[(currentUserRank - 1) % AVATAR_GRADIENTS.length] }}>
+                  {currentUser.avatar_url ? (
+                    <img src={currentUser.avatar_url} alt="" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white">
                       <User className="w-3.5 h-3.5" />
@@ -1484,11 +1493,15 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm truncate">{row.username ? `@${row.username}` : shortAddr(row.wallet)}</div>
-                  <div className="text-[10px] text-muted-foreground">{row.packs_shredded} packs · {row.xp} XP</div>
+                  <div className="font-bold text-sm truncate">{currentUser.username ? `@${currentUser.username}` : shortAddr(currentUser.wallet)}</div>
+                  <div className="text-[10px] text-muted-foreground">{currentUser.packs_shredded} packs · {currentUser.xp} XP</div>
                 </div>
               </div>
-            ))}
+            ) : (
+              <div className="rounded-xl border border-dashed border-border/70 bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
+                Connect a wallet and join the leaderboard to see your exact rank here.
+              </div>
+            )}
           </div>
           {leaderboard.map((row, index) => (
             <div key={`${row.wallet ?? row.username ?? index}`} className="stat-card rounded-xl px-2.5 py-2 flex items-center gap-2">
