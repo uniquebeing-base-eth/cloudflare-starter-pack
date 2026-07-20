@@ -14,7 +14,7 @@
     "buttonTitle": "Launch Shreds",
     "splashImageUrl": "https://shred.signalify.xyz/splash.png",
     "splashBackgroundColor": "#0a0f0a",
-    "webhookUrl": "https://shred.signalify.xyz/api/webhook",
+    "webhookUrl": "https://api.neynar.com/f/app/0469068f-e514-46a2-97e8-5a7d8f6cee4e/event",
     "subtitle": "Shred Earn and Collect",
     "description": "Shred packs earn rewards and collect on Celo",
     "primaryCategory": "games",
