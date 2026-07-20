@@ -61,7 +61,7 @@ export const getMyProfile = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     if (!row || !row.username || row.username.trim().length === 0) {
-      const resolved = await resolveOnchainUsername(normalizedWallet);
+      const resolved = await resolveOnchainUsername(normalizedWallet, { force: true });
       if (resolved) {
         const { error: upsertError } = await supabasePublic.rpc("upsert_wallet_profile", {
           _wallet: normalizedWallet,

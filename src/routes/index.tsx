@@ -589,11 +589,30 @@ function HomeScreen() {
           callGetStarterCooldown({ data: { wallet: wallet.address } }),
         ]);
         const nextProfile = profile as { username?: string | null; wallet?: string | null; xp?: number | null; packs_shredded?: number | null; level?: number | null; avatar_url?: string | null } | null;
+
         if (nextProfile?.username) {
           setUsername(nextProfile.username);
+        } else if (wallet.address) {
+          const onchainName = await fetchUsernameOnChain(wallet.address);
+          if (onchainName) {
+            setUsername(onchainName);
+            try {
+              await callUpsertProfile({ data: { wallet: wallet.address, username: onchainName } });
+            } catch (error) {
+              console.warn("[profile] failed to persist on-chain username during refresh", { wallet: wallet.address, error });
+            }
+          } else {
+            setUsername((prev) => {
+              if (prev && nextProfile?.wallet?.toLowerCase() === wallet.address?.toLowerCase()) {
+                return prev;
+              }
+              return null;
+            });
+          }
         } else {
           setUsername(null);
         }
+
         if (nextProfile) {
           const normalizedProfile = toStoredProfile(wallet.address, nextProfile);
           setProfileSummary(normalizedProfile);
@@ -612,7 +631,7 @@ function HomeScreen() {
     } catch (error) {
       console.error("[profile] failed to refresh database profile data", error);
     }
-  }, [wallet.address, leaderboardRange, callGetMyProfile, callListMyDiscoveries, callGetStarterCooldown, callGetLeaderboard]);
+  }, [wallet.address, leaderboardRange, callGetMyProfile, callListMyDiscoveries, callGetStarterCooldown, callGetLeaderboard, callUpsertProfile]);
 
   const refreshStatsAndFeed = useCallback(async () => {
     try {

@@ -23,10 +23,10 @@ function getRpcUrl(): string {
   return env.CELO_RPC_URL || env.VITE_CELO_RPC_URL || "https://forno.celo.org";
 }
 
-export async function resolveOnchainUsername(wallet: string): Promise<string | null> {
+export async function resolveOnchainUsername(wallet: string, opts?: { force?: boolean }): Promise<string | null> {
   const key = wallet.toLowerCase();
   const cached = cache.get(key);
-  if (cached && cached.expires > Date.now()) return cached.name;
+  if (!opts?.force && cached && cached.expires > Date.now()) return cached.name;
 
   try {
     const { createPublicClient, http } = await import("viem");
