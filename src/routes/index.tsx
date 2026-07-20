@@ -1134,7 +1134,7 @@ function HomeScreen() {
         <RevealOverlay phase={phase} reveals={reveals} pack={pack} onClose={closeReveal} />
       )}
 
-      {showLeaderboard && <LeaderboardSheet leaderboard={leaderboard} range={leaderboardRange} onRangeChange={setLeaderboardRange} onClose={() => setShowLeaderboard(false)} />}
+      {showLeaderboard && <LeaderboardSheet leaderboard={leaderboard} walletAddress={wallet.address} range={leaderboardRange} onRangeChange={setLeaderboardRange} onClose={() => setShowLeaderboard(false)} />}
       {showProfile && (
         <ProfileSheet
           onClose={() => setShowProfile(false)}
@@ -1442,7 +1442,7 @@ function LiveTicker({ event, idx }: { event: LiveEvent; idx: number }) {
 
 /* -------------------- Leaderboard -------------------- */
 
-function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { leaderboard: LeaderboardRow[]; range: "daily" | "weekly" | "monthly" | "all"; onRangeChange: (range: "daily" | "weekly" | "monthly" | "all") => void; onClose: () => void }) {
+function LeaderboardSheet({ leaderboard, walletAddress, range, onRangeChange, onClose }: { leaderboard: LeaderboardRow[]; walletAddress: string | null; range: "daily" | "weekly" | "monthly" | "all"; onRangeChange: (range: "daily" | "weekly" | "monthly" | "all") => void; onClose: () => void }) {
   const tabs = ["Daily", "Weekly", "Monthly", "All Time"] as const;
   const tabMap: Record<(typeof tabs)[number], "daily" | "weekly" | "monthly" | "all"> = {
     Daily: "daily",
@@ -1451,10 +1451,9 @@ function LeaderboardSheet({ leaderboard, range, onRangeChange, onClose }: { lead
     "All Time": "all",
   };
 
-  const currentWallet = typeof window !== "undefined" ? window.localStorage.getItem("shreds_last_wallet") : null;
   const currentUserIndex = leaderboard.findIndex((row) => {
     const rowWallet = row.wallet?.toLowerCase();
-    const targetWallet = currentWallet?.toLowerCase();
+    const targetWallet = walletAddress?.toLowerCase();
     return Boolean(targetWallet && rowWallet && rowWallet === targetWallet);
   });
   const currentUser = currentUserIndex >= 0 ? leaderboard[currentUserIndex] : null;
