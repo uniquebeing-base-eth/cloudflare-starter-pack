@@ -1,3 +1,19 @@
+The onboarding isn’t fully responsive on some mobile devices. On smaller screens, the onboarding card is being cut off, leaving large empty spaces and preventing users from seeing the full content.
+
+Please make the onboarding fully mobile responsive across all screen sizes and aspect ratios.
+
+Specifically:
+	•	Scale the onboarding card dynamically based on the viewport instead of using fixed heights or widths.
+	•	Ensure the entire onboarding screen fits within the visible area without being cropped.
+	•	Maintain consistent padding and margins on all devices.
+	•	Make images responsive using object-fit: contain where appropriate so they never overflow their container.
+	•	Ensure text, progress indicators (1/4), buttons, and images always remain visible.
+	•	Test on small Android devices, large Android devices, iPhones (including older models), tablets, and Farcaster’s in-app browser.
+	•	Avoid horizontal scrolling and large empty spaces.
+	•	Use responsive units (%, vw, vh, rem) instead of fixed pixel values wherever possible.
+
+The onboarding should look polished and centered on every device, with no clipping or overflow. It should provide the same experience regardless of screen size.
+
 # Shreds
 
 Shreds is a MiniPay-native discovery experience built on Celo, where users slash open digital packs to discover stablecoin rewards, collectible cards, and educational facts about the Celo ecosystem.
