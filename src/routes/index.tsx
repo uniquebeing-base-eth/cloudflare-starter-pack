@@ -548,6 +548,7 @@ function HomeScreen() {
   const [showProfile, setShowProfile] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
   const [leaderboardRange, setLeaderboardRange] = useState<"daily" | "weekly" | "monthly" | "all">("weekly");
@@ -677,6 +678,8 @@ function HomeScreen() {
       .filter((key) => key.startsWith("shreds_starter_cd"))
       .forEach((key) => window.localStorage.removeItem(key));
     if (!localStorage.getItem("shreds_onboarded")) setShowOnboarding(true);
+    const hasSeenAnnouncement = localStorage.getItem("shreds_announcement_seen");
+    if (!hasSeenAnnouncement) setShowAnnouncement(true);
     setHydrated(true);
     // Warm image cache so packs & discoveries render instantly on first shred.
     const warm = [
@@ -756,6 +759,11 @@ function HomeScreen() {
   const finishOnboarding = () => {
     try { localStorage.setItem("shreds_onboarded", "1"); } catch { /* noop */ }
     setShowOnboarding(false);
+  };
+
+  const dismissAnnouncement = () => {
+    try { localStorage.setItem("shreds_announcement_seen", "1"); } catch { /* noop */ }
+    setShowAnnouncement(false);
   };
 
   const replayOnboarding = () => { setShowHelp(false); setShowOnboarding(true); };
@@ -1134,6 +1142,7 @@ function HomeScreen() {
           }}
         />
       )}
+      {showAnnouncement && <AnnouncementOverlay onClose={dismissAnnouncement} />}
       {showOnboarding && <OnboardingOverlay onDone={finishOnboarding} />}
       {showHelp && <HelpSheet onClose={() => setShowHelp(false)} onReplay={replayOnboarding} />}
       {showUsernameModal && (
@@ -1770,6 +1779,55 @@ function OnboardingOverlay({ onDone }: { onDone: () => void }) {
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------- Announcement Overlay -------------------- */
+
+function AnnouncementOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[80] bg-background/90 backdrop-blur-md flex items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-[28px] border border-border bg-card p-5 shadow-2xl reveal-pop">
+        <div className="flex items-center justify-between mb-4">
+          <div className="inline-flex items-center gap-2 rounded-full bg-shred/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-shred">
+            <Sparkles className="w-3.5 h-3.5" /> New drop
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full stat-card flex items-center justify-center" aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-shred/20 bg-gradient-to-br from-shred/10 via-background to-background p-4">
+          <h2 className="font-display text-2xl leading-tight">Start strong. Claim your on-chain identity.</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            To get started, you need an on-chain username on Celo. For the first 1000 users, we are sponsoring the Celo gas needed to register your username on Celo.
+          </p>
+
+          <div className="mt-4 rounded-2xl border border-border bg-background/80 p-3 text-sm">
+            <p className="font-semibold text-foreground">Message</p>
+            <a
+              href="https://farcaster.xyz/uniquebeing404"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-2 rounded-full bg-shred/10 px-3 py-2 font-semibold text-shred transition hover:bg-shred/20"
+            >
+              <span>@uniquebeing404</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              Tap the handle above to open the Farcaster profile of <span className="font-semibold text-foreground">@uniquebeing404</span> and receive gas sponsorship help.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-2xl bg-shred py-3 text-sm font-black uppercase tracking-[0.25em] text-primary-foreground glow-shred active:scale-[0.98]"
+        >
+          Let’s shred
+        </button>
       </div>
     </div>
   );
