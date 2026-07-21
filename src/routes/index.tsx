@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ChangeEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ChangeEvent } from "react";
 import {
   Trophy, User, Users, Package, Gem, Wallet, Flame, Gift, Star,
   Lightbulb, X, ChevronLeft, ChevronRight, Award, Zap,
@@ -1791,8 +1791,35 @@ const ONBOARDING_SLIDES = [onboarding1.url, onboarding2.url, onboarding3.url, on
 
 function OnboardingOverlay({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0);
+  const [viewportReady, setViewportReady] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const startRef = useRef<{ x: number; t: number } | null>(null);
   const last = step === ONBOARDING_SLIDES.length - 1;
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncViewport = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight ?? 0;
+      const safeHeight = Math.max(height, 320);
+      setViewportHeight(safeHeight);
+      document.documentElement.style.setProperty("--app-viewport-height", `${safeHeight}px`);
+    };
+
+    syncViewport();
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener("resize", syncViewport);
+    window.addEventListener("resize", syncViewport);
+    const frame = window.requestAnimationFrame(() => setViewportReady(true));
+    const timer = window.setTimeout(syncViewport, 120);
+
+    return () => {
+      visualViewport?.removeEventListener("resize", syncViewport);
+      window.removeEventListener("resize", syncViewport);
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   const onDown = (e: React.PointerEvent) => { startRef.current = { x: e.clientX, t: Date.now() }; };
   const onUp = (e: React.PointerEvent) => {
@@ -1805,40 +1832,50 @@ function OnboardingOverlay({ onDone }: { onDone: () => void }) {
     }
   };
 
+  if (!viewportReady || viewportHeight === null) {
+    return null;
+  }
+
   return (
-    <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center px-4 py-6">
+    <div
+      className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center px-3 py-3 sm:px-4 sm:py-4"
+      style={{ minHeight: `${viewportHeight}px`, height: `${viewportHeight}px` }}
+    >
       <div
-        className="relative w-full max-w-[min(92vw,640px)] max-h-[92vh] mx-auto flex flex-col select-none touch-none rounded-2xl overflow-hidden"
+        className="relative w-full max-w-[min(92vw,640px)] max-h-[min(92vh,860px)] mx-auto flex flex-col select-none touch-none rounded-[24px] overflow-hidden border border-border/70 shadow-2xl"
         onPointerDown={onDown}
         onPointerUp={onUp}
         role="dialog"
         aria-modal="true"
+        style={{ minHeight: 0 }}
       >
-        <div className="w-full h-full flex flex-col bg-card">
-          <div className="flex-1 min-h-0 flex items-center justify-center p-4">
+        <div className="w-full h-full min-h-0 flex flex-col bg-card">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-3 sm:p-4">
             <img
               src={ONBOARDING_SLIDES[step]}
               alt={`Onboarding ${step + 1}`}
               draggable={false}
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              loading="eager"
+              decoding="async"
+              style={{ width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', objectPosition: 'center' }}
               className="block"
             />
           </div>
 
-          <div className="w-full px-4 py-3 border-t border-border bg-gradient-to-t from-background/60 to-transparent">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[12px] text-muted-foreground">{step + 1} / {ONBOARDING_SLIDES.length}</div>
-              <div className="flex items-center gap-2 w-full">
+          <div className="w-full px-3 py-3 sm:px-4 sm:py-3 border-t border-border bg-gradient-to-t from-background/70 via-background/40 to-transparent">
+            <div className="flex items-center justify-between gap-2 sm:gap-3">
+              <div className="text-[11px] sm:text-[12px] text-muted-foreground shrink-0">{step + 1} / {ONBOARDING_SLIDES.length}</div>
+              <div className="flex items-center gap-2 flex-1 min-w-0">
                 <button
                   onClick={onDone}
-                  className="py-2 px-3 rounded-2xl text-[13px] font-bold tracking-widest stat-card text-muted-foreground"
+                  className="py-2 px-3 rounded-2xl text-[12px] sm:text-[13px] font-bold tracking-widest stat-card text-muted-foreground shrink-0"
                 >SKIP</button>
-                <div className="flex-1" />
+                <div className="flex-1 min-w-0" />
                 <button
                   onClick={() => last ? onDone() : setStep(step + 1)}
-                  className="py-2 px-3 rounded-2xl text-[13px] font-bold tracking-widest bg-shred text-primary-foreground glow-shred flex items-center justify-center gap-2"
+                  className="py-2 px-3 rounded-2xl text-[12px] sm:text-[13px] font-bold tracking-widest bg-shred text-primary-foreground glow-shred flex items-center justify-center gap-2 shrink-0"
                 >
-                  <span className="text-sm">{last ? "LET'S SHRED" : "NEXT"}</span>
+                  <span>{last ? "LET'S SHRED" : "NEXT"}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
