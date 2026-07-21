@@ -1,8 +1,3 @@
-We received feedback from an Android user (Motorola 30 Neo, Android 14) that the onboarding screen is rendering incorrectly on first launch. The onboarding appears shifted, and the user can’t interact with the Let’s Shred or navigation buttons.
-
-Please investigate and debug the root cause of this issue rather than applying a visual workaround. It appears to happen during the app’s initial load on some Android devices.
-
-Check the onboarding rendering lifecycle, layout calculations, viewport sizing, image loading, animations, and any platform-specific behavior that could cause the UI to render in the wrong position. The goal is to identify why this only happens on certain devices and ensure the onboarding renders consistently across all screen sizes and operating systems.
 
 # Shreds
 
