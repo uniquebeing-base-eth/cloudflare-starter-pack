@@ -339,17 +339,17 @@ export const getLeaderboard = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { getSupabasePublic } = await import("./supabase-public.server");
     const supabasePublic = getSupabasePublic();
-    // Use the leaderboard_view which aggregates XP/packs per range (daily/weekly/monthly/all)
     const { data: rows, error } = await supabasePublic
-      .from("leaderboard_view")
-      .select("username, wallet, xp, packs_shredded, range")
-      .eq("range", data.range)
+      .from("profiles")
+      .select("username, wallet, xp, packs_shredded, avatar_url")
       .order("xp", { ascending: false })
       .order("packs_shredded", { ascending: false })
       .limit(50);
     if (error) return [];
 
-    // Backfill on-chain usernames for leaderboard rows missing a username.
+    // Lazily backfill on-chain usernames for leaderboard rows that are still
+    // showing a bare wallet address. Resolves at most 50 wallets, cached in
+    // memory for 10 minutes so repeated fetches are cheap.
     const missing = (rows ?? []).filter((r) => r.wallet && (!r.username || r.username.trim().length === 0));
     if (missing.length > 0) {
       const { resolveOnchainUsername } = await import("./onchain-username.server");
@@ -357,12 +357,12 @@ export const getLeaderboard = createServerFn({ method: "GET" })
         missing.map(async (r) => {
           const name = await resolveOnchainUsername(r.wallet as string);
           if (!name) return;
+          r.username = name;
           try {
             await supabasePublic.rpc("upsert_wallet_profile", {
               _wallet: (r.wallet as string).toLowerCase(),
               _username: name,
             });
-            r.username = name;
           } catch (e) {
             console.warn("[leaderboard] backfill upsert failed", { wallet: r.wallet, error: (e as Error)?.message });
           }
@@ -370,99 +370,12 @@ export const getLeaderboard = createServerFn({ method: "GET" })
       );
     }
 
-    return (rows ?? []).map((row) => ({
-      username: row.username ?? null,
-      wallet: row.wallet ?? null,
-      xp: Number(row.xp ?? 0),
-      packs_shredded: Number(row.packs_shredded ?? 0),
-      avatar_url: null,
-      range: data.range,
-    }));
+    return (rows ?? []).map((row) => ({ ...row, range: data.range })) as Array<{
+      username: string | null;
+      wallet: string | null;
+      xp: number;
+      packs_shredded: number;
+      avatar_url: string | null;
+      range: string;
+    }>;
   });
-
-  export const getMyLeaderboardRank = createServerFn({ method: "GET" })
-    .inputValidator((raw: unknown) => z.object({ wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/), range: z.enum(["daily", "weekly", "monthly", "all"]).default("weekly") }).parse(raw ?? {}))
-    .handler(async ({ data }) => {
-      const { getSupabasePublic } = await import("./supabase-public.server");
-      const supabasePublic = getSupabasePublic();
-      const profileId = walletToProfileId(data.wallet);
-
-      // Fetch the user's profile row
-      const { data: meRow, error: meErr } = await supabasePublic
-        .from("profiles").select("id, username, wallet, xp, packs_shredded, avatar_url").eq("id", profileId).maybeSingle();
-      if (meErr) throw new Error(meErr.message);
-        // If the user doesn't yet have a profile row, compute their rank
-        // relative to existing profiles assuming 0 XP and 0 packs_shredded,
-        // and return a minimal profile so the frontend can display it.
-        if (!meRow) {
-          const xp = 0;
-          const packs = 0;
-          const filter = `xp.gt.${xp},(xp.eq.${xp},packs_shredded.gt.${packs})`;
-          const { count, error: countErr } = await supabasePublic
-            .from("profiles")
-            .select("id", { count: "exact", head: true })
-            .or(filter);
-          if (countErr) throw new Error(countErr.message);
-          const outrank = Number(count ?? 0);
-          const rank = outrank + 1;
-          return {
-            ok: true,
-            rank,
-            profile: {
-              id: profileId,
-              username: null,
-              wallet: data.wallet.toLowerCase(),
-              xp: 0,
-              packs_shredded: 0,
-              avatar_url: null,
-            },
-          };
-        }
-
-        // Use the leaderboard_view to compute range-specific XP/packs.
-        const walletLower = data.wallet.toLowerCase();
-        const { data: meRangeRow, error: meRangeErr } = await supabasePublic
-          .from("leaderboard_view")
-          .select("username, wallet, xp, packs_shredded, range")
-          .eq("range", data.range)
-          .eq("wallet", walletLower)
-          .maybeSingle();
-        if (meRangeErr) throw new Error(meRangeErr.message);
-
-        let xp = 0;
-        let packs = 0;
-        if (meRangeRow) {
-          xp = Number(meRangeRow.xp ?? 0);
-          packs = Number(meRangeRow.packs_shredded ?? 0);
-        }
-
-        // Count how many profiles outrank this user in the selected range
-        const filter = `xp.gt.${xp},(xp.eq.${xp},packs_shredded.gt.${packs})`;
-        const { count, error: countErr } = await supabasePublic
-          .from("leaderboard_view")
-          .select("wallet", { count: "exact", head: true })
-          .eq("range", data.range)
-          .or(filter);
-        if (countErr) throw new Error(countErr.message);
-        const outrank = Number(count ?? 0);
-        const rank = outrank + 1;
-
-        if (meRangeRow) {
-          return { ok: true, rank, profile: meRangeRow };
-        }
-
-        // If the user has no row in the range view, try to fetch their profile
-        const { data: profileRow, error: profileErr } = await supabasePublic
-          .from("profiles")
-          .select("id, username, wallet, xp, packs_shredded, avatar_url")
-          .eq("wallet", walletLower)
-          .maybeSingle();
-        if (profileErr) throw new Error(profileErr.message);
-
-        if (profileRow) {
-          return { ok: true, rank, profile: profileRow };
-        }
-
-        // No profile exists — return a minimal profile object with 0 stats
-        return { ok: true, rank, profile: { id: walletToProfileId(data.wallet), username: null, wallet: walletLower, xp: 0, packs_shredded: 0, avatar_url: null } };
-    });
