@@ -1472,7 +1472,7 @@ function LeaderboardSheet({ leaderboard, walletAddress, range, onRangeChange, on
         const res = await callGetMyLeaderboardRank({ data: { wallet: walletAddress, range } });
         const payload = res as { ok?: boolean; rank?: number | null; profile?: any };
         if (cancelled) return;
-        if (payload?.ok && payload.rank) {
+        if (payload?.ok && payload.rank != null) {
           setExternalRank(payload.rank ?? null);
           if (payload.profile) {
             setExternalProfile({
@@ -1483,6 +1483,8 @@ function LeaderboardSheet({ leaderboard, walletAddress, range, onRangeChange, on
               avatar_url: payload.profile.avatar_url ?? null,
               range: range,
             });
+          } else {
+            setExternalProfile({ username: null, wallet: walletAddress ?? null, xp: 0, packs_shredded: 0, avatar_url: null, range });
           }
         }
       } catch (e) {

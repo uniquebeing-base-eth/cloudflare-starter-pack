@@ -391,20 +391,46 @@ export const getLeaderboard = createServerFn({ method: "GET" })
       const { data: meRow, error: meErr } = await supabasePublic
         .from("profiles").select("id, username, wallet, xp, packs_shredded, avatar_url").eq("id", profileId).maybeSingle();
       if (meErr) throw new Error(meErr.message);
-      if (!meRow) return { ok: false, rank: null, profile: null };
+        // If the user doesn't yet have a profile row, compute their rank
+        // relative to existing profiles assuming 0 XP and 0 packs_shredded,
+        // and return a minimal profile so the frontend can display it.
+        if (!meRow) {
+          const xp = 0;
+          const packs = 0;
+          const filter = `xp.gt.${xp},(xp.eq.${xp},packs_shredded.gt.${packs})`;
+          const { count, error: countErr } = await supabasePublic
+            .from("profiles")
+            .select("id", { count: "exact", head: true })
+            .or(filter);
+          if (countErr) throw new Error(countErr.message);
+          const outrank = Number(count ?? 0);
+          const rank = outrank + 1;
+          return {
+            ok: true,
+            rank,
+            profile: {
+              id: profileId,
+              username: null,
+              wallet: data.wallet.toLowerCase(),
+              xp: 0,
+              packs_shredded: 0,
+              avatar_url: null,
+            },
+          };
+        }
 
-      const xp = Number(meRow.xp ?? 0);
-      const packs = Number(meRow.packs_shredded ?? 0);
+        const xp = Number(meRow.xp ?? 0);
+        const packs = Number(meRow.packs_shredded ?? 0);
 
-      // Count how many profiles outrank this user (higher xp, or equal xp but more packs_shredded)
-      const filter = `xp.gt.${xp},(xp.eq.${xp},packs_shredded.gt.${packs})`;
-      const { count, error: countErr } = await supabasePublic
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .or(filter);
-      if (countErr) throw new Error(countErr.message);
-      const outrank = Number(count ?? 0);
-      const rank = outrank + 1;
+        // Count how many profiles outrank this user (higher xp, or equal xp but more packs_shredded)
+        const filter = `xp.gt.${xp},(xp.eq.${xp},packs_shredded.gt.${packs})`;
+        const { count, error: countErr } = await supabasePublic
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .or(filter);
+        if (countErr) throw new Error(countErr.message);
+        const outrank = Number(count ?? 0);
+        const rank = outrank + 1;
 
-      return { ok: true, rank, profile: meRow };
+        return { ok: true, rank, profile: meRow };
     });
