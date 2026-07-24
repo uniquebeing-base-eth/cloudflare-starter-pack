@@ -379,3 +379,32 @@ export const getLeaderboard = createServerFn({ method: "GET" })
       range: string;
     }>;
   });
+
+  export const getMyLeaderboardRank = createServerFn({ method: "GET" })
+    .inputValidator((raw: unknown) => z.object({ wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/), range: z.enum(["daily", "weekly", "monthly", "all"]).default("weekly") }).parse(raw ?? {}))
+    .handler(async ({ data }) => {
+      const { getSupabasePublic } = await import("./supabase-public.server");
+      const supabasePublic = getSupabasePublic();
+      const profileId = walletToProfileId(data.wallet);
+
+      // Fetch the user's profile row
+      const { data: meRow, error: meErr } = await supabasePublic
+        .from("profiles").select("id, username, wallet, xp, packs_shredded, avatar_url").eq("id", profileId).maybeSingle();
+      if (meErr) throw new Error(meErr.message);
+      if (!meRow) return { ok: false, rank: null, profile: null };
+
+      const xp = Number(meRow.xp ?? 0);
+      const packs = Number(meRow.packs_shredded ?? 0);
+
+      // Count how many profiles outrank this user (higher xp, or equal xp but more packs_shredded)
+      const filter = `xp.gt.${xp},(xp.eq.${xp},packs_shredded.gt.${packs})`;
+      const { count, error: countErr } = await supabasePublic
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .or(filter);
+      if (countErr) throw new Error(countErr.message);
+      const outrank = Number(count ?? 0);
+      const rank = outrank + 1;
+
+      return { ok: true, rank, profile: meRow };
+    });

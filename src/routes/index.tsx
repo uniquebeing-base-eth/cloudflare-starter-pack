@@ -24,6 +24,7 @@ import {
   recordPackPurchase,
   findUnclaimedPackPurchase,
   getLeaderboard,
+  getMyLeaderboardRank,
   getStatsAndFeed,
 } from "@/lib/user-data.functions";
 import {
@@ -1459,6 +1460,38 @@ function LeaderboardSheet({ leaderboard, walletAddress, range, onRangeChange, on
   });
   const currentUser = currentUserIndex >= 0 ? leaderboard[currentUserIndex] : null;
   const currentUserRank = currentUser ? currentUserIndex + 1 : null;
+  const [externalRank, setExternalRank] = useState<number | null>(null);
+  const [externalProfile, setExternalProfile] = useState<LeaderboardRow | null>(null);
+  const callGetMyLeaderboardRank = useServerFn(getMyLeaderboardRank);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchRank = async () => {
+      if (currentUser || !walletAddress) return;
+      try {
+        const res = await callGetMyLeaderboardRank({ data: { wallet: walletAddress, range } });
+        const payload = res as { ok?: boolean; rank?: number | null; profile?: any };
+        if (cancelled) return;
+        if (payload?.ok && payload.rank) {
+          setExternalRank(payload.rank ?? null);
+          if (payload.profile) {
+            setExternalProfile({
+              username: payload.profile.username ?? null,
+              wallet: payload.profile.wallet ?? null,
+              xp: Number(payload.profile.xp ?? 0),
+              packs_shredded: Number(payload.profile.packs_shredded ?? 0),
+              avatar_url: payload.profile.avatar_url ?? null,
+              range: range,
+            });
+          }
+        }
+      } catch (e) {
+        // non-fatal
+      }
+    };
+    void fetchRank();
+    return () => { cancelled = true; };
+  }, [currentUser, walletAddress, range, callGetMyLeaderboardRank]);
 
   return (
     <Sheet title="Leaderboard" onClose={onClose} Icon={Trophy}>
@@ -1495,6 +1528,23 @@ function LeaderboardSheet({ leaderboard, walletAddress, range, onRangeChange, on
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-sm truncate">{currentUser.username ? `@${currentUser.username}` : shortAddr(currentUser.wallet)}</div>
                   <div className="text-[10px] text-muted-foreground">{currentUser.packs_shredded} packs · {currentUser.xp} XP</div>
+                </div>
+              </div>
+            ) : externalRank && externalProfile ? (
+              <div className="flex items-center gap-2 rounded-xl bg-background/70 px-2.5 py-2">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] bg-shred/15 text-shred shrink-0">#{externalRank}</div>
+                <div className="w-8 h-8 rounded-full overflow-hidden shrink-0" style={{ background: AVATAR_GRADIENTS[(externalRank - 1) % AVATAR_GRADIENTS.length] }}>
+                  {externalProfile.avatar_url ? (
+                    <img src={externalProfile.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-white">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{externalProfile.username ? `@${externalProfile.username}` : shortAddr(externalProfile.wallet)}</div>
+                  <div className="text-[10px] text-muted-foreground">{externalProfile.packs_shredded} packs · {externalProfile.xp} XP</div>
                 </div>
               </div>
             ) : (
